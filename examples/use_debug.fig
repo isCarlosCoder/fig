@@ -1,0 +1,18 @@
+use "debug"
+
+print(debug.inspect(42))
+print(debug.inspect("hello"))
+print(debug.inspect(true))
+print(debug.inspect(null))
+print(debug.inspect([1, 2, 3]))
+print(debug.inspect({ a: 1 }))
+
+print(debug.dump(42))
+print(debug.dump("hello"))
+print(debug.dump([1, "two", true]))
+print(debug.dump({ nome: "Fig", versao: 1 }))
+
+print(debug.type(42))
+
+debug.assert(1 == 1, "math works")
+print("assert passed")

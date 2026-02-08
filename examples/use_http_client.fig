@@ -1,0 +1,41 @@
+use "http"
+use "json"
+
+print("=== GET request ===")
+let res = http.get("https://httpbin.org/get")
+print(res.status)
+print(http.isOk(res))
+
+print("=== POST request ===")
+http.setHeader("Content-Type", "application/json")
+let body = json.stringify({"name": "Fig", "version": 1})
+let res2 = http.post("https://httpbin.org/post", body)
+print(res2.status)
+
+let parsed = json.parse(res2.body)
+print(parsed["data"])
+
+http.clearHeaders()
+
+print("=== Custom headers ===")
+let res3 = http.request("GET", "https://httpbin.org/headers", null, {
+    "X-Custom": "fig-lang",
+    "Accept": "application/json"
+})
+let hdrs = json.parse(res3.body)
+print(hdrs["headers"]["X-Custom"])
+
+print("=== Status check ===")
+let res4 = http.get("https://httpbin.org/status/200")
+http.raiseForStatus(res4)
+print("no error for 200")
+
+print("=== Timeout ===")
+http.setTimeout(10000)
+print("timeout set to 10s")
+
+print("=== Download ===")
+http.download("https://httpbin.org/robots.txt", "/tmp/fig_http_test.txt")
+print("downloaded!")
+
+print("done")

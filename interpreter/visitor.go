@@ -1,0 +1,1986 @@
+package interpreter
+
+import (
+	"fmt"
+	"io"
+	"math"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/antlr4-go/antlr/v4"
+	"github.com/iscarloscoder/fig/builtins"
+	"github.com/iscarloscoder/fig/environment"
+	"github.com/iscarloscoder/fig/parser"
+)
+
+// FigVisitor evaluates the parse tree. It keeps a global environment and a current (local) environment stack.
+type loopSignal int
+
+const (
+	loopNone loopSignal = iota
+	loopBreak
+	loopContinue
+)
+
+// returnSignal wraps a return value so it can be propagated up the call stack.
+type returnSignal struct {
+	value environment.Value
+}
+
+type FigVisitor struct {
+	parser.BaseFigParserVisitor
+	global *environment.Env
+	env    *environment.Env // current environment
+	out    io.Writer        // output for print
+
+	// RuntimeErr records the first runtime error encountered during visiting.
+	RuntimeErr error
+
+	// source lines for creating snippet in runtime errors
+	srcLines []string
+
+	// loopDepth indicates how many nested loops we're currently in (to validate break/continue)
+	loopDepth int
+
+	// baseDir is the directory of the currently executing .fig file (for resolving imports)
+	baseDir string
+
+	// importedFiles tracks already-imported absolute paths to prevent circular imports
+	importedFiles map[string]bool
+}
+
+func NewFigVisitor(globalEnv *environment.Env, out io.Writer) *FigVisitor {
+	if out == nil {
+		out = os.Stdout
+	}
+	v := &FigVisitor{global: globalEnv, out: out, importedFiles: make(map[string]bool)}
+	// start with a local env whose parent is the global env
+	v.env = environment.NewEnv(globalEnv)
+	return v
+}
+
+// NewFigVisitorWithSource creates a visitor and attaches source lines so runtime
+// errors can include snippets with carets.
+func NewFigVisitorWithSource(globalEnv *environment.Env, out io.Writer, source string) *FigVisitor {
+	v := NewFigVisitor(globalEnv, out)
+	if source != "" {
+		v.srcLines = strings.Split(source, "\n")
+	}
+	return v
+}
+
+func (v *FigVisitor) pushEnv() {
+	v.env = environment.NewEnv(v.env)
+}
+
+func (v *FigVisitor) popEnv() {
+	if v.env != nil {
+		v.env = v.env.Parent()
+	}
+}
+
+// makeRuntimeError builds a RuntimeError with snippet information when source is available.
+func (v *FigVisitor) makeRuntimeError(line, column int, msg string, length int) *RuntimeError {
+	r := &RuntimeError{Line: line, Column: column, Message: msg, ColumnStart: column, Length: length}
+	if v.srcLines != nil && line-1 >= 0 && line-1 < len(v.srcLines) {
+		ln := v.srcLines[line-1]
+		r.Snippet = ln
+		if r.ColumnStart < 0 {
+			r.ColumnStart = 0
+		}
+		if r.ColumnStart > len(ln) {
+			r.ColumnStart = len(ln)
+		}
+		if r.ColumnStart+r.Length > len(ln) {
+			r.Length = len(ln) - r.ColumnStart
+		}
+	}
+	return r
+}
+
+func (v *FigVisitor) VisitProgram(ctx *parser.ProgramContext) interface{} {
+	// run in a fresh local environment that inherits from global
+	prev := v.env
+	v.env = environment.NewEnv(v.global)
+	defer func() { v.env = prev }()
+
+	for _, st := range ctx.AllStatements() {
+		v.VisitStatements(st.(*parser.StatementsContext))
+		if v.RuntimeErr != nil {
+			return nil
+		}
+	}
+	return nil
+}
+
+func (v *FigVisitor) VisitStatements(ctx *parser.StatementsContext) interface{} {
+	if ctx.VarDeclaration() != nil {
+		return v.VisitVarDeclaration(ctx.VarDeclaration().(*parser.VarDeclarationContext))
+	}
+	if ctx.VarAtribuition() != nil {
+		return v.VisitVarAtribuition(ctx.VarAtribuition().(*parser.VarAtribuitionContext))
+	}
+	if ctx.PrintStmt() != nil {
+		return v.VisitPrintStmt(ctx.PrintStmt().(*parser.PrintStmtContext))
+	}
+	if ctx.IfStmt() != nil {
+		return v.VisitIfStmt(ctx.IfStmt().(*parser.IfStmtContext))
+	}
+	if ctx.WhileStmt() != nil {
+		return v.VisitWhileStmt(ctx.WhileStmt().(*parser.WhileStmtContext))
+	}
+	if ctx.DoWhileStmt() != nil {
+		return v.VisitDoWhileStmt(ctx.DoWhileStmt().(*parser.DoWhileStmtContext))
+	}
+	if ctx.ForStmt() != nil {
+		return v.VisitForStmt(ctx.ForStmt().(*parser.ForStmtContext))
+	}
+	if ctx.ForInStmt() != nil {
+		return ctx.ForInStmt().Accept(v)
+	}
+	if ctx.BreakStmt() != nil {
+		return v.VisitBreakStmt(ctx.BreakStmt().(*parser.BreakStmtContext))
+	}
+	if ctx.ContinueStmt() != nil {
+		return v.VisitContinueStmt(ctx.ContinueStmt().(*parser.ContinueStmtContext))
+	}
+	if ctx.FnDecl() != nil {
+		return v.VisitFnDecl(ctx.FnDecl().(*parser.FnDeclContext))
+	}
+	if ctx.ReturnStmt() != nil {
+		return v.VisitReturnStmt(ctx.ReturnStmt().(*parser.ReturnStmtContext))
+	}
+	if ctx.MemberAssign() != nil {
+		return v.VisitMemberAssign(ctx.MemberAssign().(*parser.MemberAssignContext))
+	}
+	if ctx.ImportStmt() != nil {
+		return v.VisitImportStmt(ctx.ImportStmt().(*parser.ImportStmtContext))
+	}
+	if ctx.UseStmt() != nil {
+		return v.VisitUseStmt(ctx.UseStmt().(*parser.UseStmtContext))
+	}
+	if ctx.StructDecl() != nil {
+		return v.VisitStructDecl(ctx.StructDecl().(*parser.StructDeclContext))
+	}
+	if ctx.ExprStmt() != nil {
+		return v.VisitExprStmt(ctx.ExprStmt().(*parser.ExprStmtContext))
+	}
+	return nil
+}
+
+func (v *FigVisitor) VisitUseStmt(ctx *parser.UseStmtContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	raw := ctx.STRING().GetText()
+	modName := raw[1 : len(raw)-1]
+
+	mod := builtins.Get(modName)
+	if mod == nil {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			fmt.Sprintf("unknown builtin module \"%s\"", modName), len(raw))
+		return nil
+	}
+
+	// Define the module as an object variable with the module name
+	v.env.Define(modName, mod.ToObject())
+
+	// If loading the http module, set the FigCaller so HTTP server handlers
+	// can invoke Fig functions via the visitor.
+	if modName == "http" {
+		builtins.FigCaller = func(fn environment.Value, args []environment.Value) error {
+			savedErr := v.RuntimeErr
+			v.RuntimeErr = nil
+			v.callFunction(0, 0, fn, args)
+			handlerErr := v.RuntimeErr
+			v.RuntimeErr = savedErr
+			return handlerErr
+		}
+	}
+
+	return nil
+}
+
+// ── struct declaration ──
+func (v *FigVisitor) VisitStructDecl(ctx *parser.StructDeclContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	name := ctx.ID().GetText()
+	sd := &environment.StructDef{
+		Name:    name,
+		Methods: make(map[string]*environment.FuncDef),
+	}
+
+	for _, member := range ctx.AllStructMember() {
+		switch m := member.(type) {
+		case *parser.StructFieldContext:
+			fieldName := m.ID().GetText()
+			defaultVal := environment.NewNil()
+			if m.Expr() != nil {
+				defaultVal = v.VisitExpr(m.Expr().(*parser.ExprContext)).(environment.Value)
+				if v.RuntimeErr != nil {
+					return nil
+				}
+			}
+			sd.Fields = append(sd.Fields, environment.StructField{Name: fieldName, Default: defaultVal})
+
+		case *parser.StructMethodContext:
+			methodName := m.ID().GetText()
+			var params []string
+			if fp := m.FnParams(); fp != nil {
+				for _, id := range fp.(*parser.FnParamsContext).AllID() {
+					params = append(params, id.GetText())
+				}
+			}
+			fd := &environment.FuncDef{
+				Name:       methodName,
+				Params:     params,
+				Body:       m.Block(),
+				ClosureEnv: v.env,
+			}
+			sd.Methods[methodName] = fd
+		}
+	}
+
+	if err := v.env.Define(name, environment.NewStructDef(sd)); err != nil {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(name))
+	}
+	return nil
+}
+
+func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	// Get the string literal and strip quotes
+	raw := ctx.STRING().GetText()
+	modPath := raw[1 : len(raw)-1]
+
+	// Append .fig extension if not present
+	if !strings.HasSuffix(modPath, ".fig") {
+		modPath = modPath + ".fig"
+	}
+
+	// Resolve relative to the current file's directory
+	resolved := modPath
+	if !filepath.IsAbs(modPath) {
+		resolved = filepath.Join(v.baseDir, modPath)
+	}
+	resolved = filepath.Clean(resolved)
+
+	// Absolute path for dedup
+	absPath, err := filepath.Abs(resolved)
+	if err != nil {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			fmt.Sprintf("cannot resolve import path: %s", modPath), len(raw))
+		return nil
+	}
+
+	// Check for circular imports
+	if v.importedFiles[absPath] {
+		// Already imported — skip silently
+		return nil
+	}
+	v.importedFiles[absPath] = true
+
+	// Read the file
+	data, readErr := os.ReadFile(absPath)
+	if readErr != nil {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			fmt.Sprintf("cannot import \"%s\": %v", modPath, readErr), len(raw))
+		return nil
+	}
+
+	source := string(data)
+
+	// Parse the imported file
+	is := antlr.NewInputStream(source)
+	lex := parser.NewFigLexer(is)
+	ts := antlr.NewCommonTokenStream(lex, antlr.TokenDefaultChannel)
+	p := parser.NewFigParser(ts)
+
+	// Capture parse errors
+	p.RemoveErrorListeners()
+	listener := NewPrettyErrorListener(source, absPath, v.out)
+	p.AddErrorListener(listener)
+
+	tree := p.Program()
+	if listener.Occurred {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			fmt.Sprintf("parse error in import \"%s\"", modPath), len(raw))
+		return nil
+	}
+
+	// Execute the imported file in the current environment
+	// Save and restore visitor state
+	prevSrcLines := v.srcLines
+	prevBaseDir := v.baseDir
+
+	v.srcLines = strings.Split(source, "\n")
+	v.baseDir = filepath.Dir(absPath)
+
+	// Visit all statements from the imported program directly
+	progCtx := tree.(*parser.ProgramContext)
+	for _, st := range progCtx.AllStatements() {
+		v.VisitStatements(st.(*parser.StatementsContext))
+		if v.RuntimeErr != nil {
+			break
+		}
+	}
+
+	// Restore state
+	v.srcLines = prevSrcLines
+	v.baseDir = prevBaseDir
+
+	return nil
+}
+
+func (v *FigVisitor) VisitExprStmt(ctx *parser.ExprStmtContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	v.VisitExpr(ctx.Expr().(*parser.ExprContext))
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	return nil
+}
+
+func (v *FigVisitor) VisitVarDeclaration(ctx *parser.VarDeclarationContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	name := ctx.ID().GetText()
+	if ctx.Expr() != nil {
+		val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if err := v.env.Define(name, val); err != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+			return nil
+		}
+	} else {
+		if err := v.env.Define(name, environment.NewNil()); err != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+			return nil
+		}
+	}
+	return nil
+}
+
+func (v *FigVisitor) VisitVarAtribuition(ctx *parser.VarAtribuitionContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	name := ctx.ID().GetText()
+	val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	if err := v.env.Assign(name, val); err != nil {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+		return nil
+	}
+	return nil
+}
+
+func (v *FigVisitor) VisitPrintStmt(ctx *parser.PrintStmtContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	fmt.Fprintln(v.out, val.String())
+	return nil
+}
+
+// Expression evaluation follows the grammar hierarchy.
+func (v *FigVisitor) VisitExpr(ctx *parser.ExprContext) interface{} {
+	if ctx.LogicalOr() != nil {
+		return v.VisitLogicalOr(ctx.LogicalOr().(*parser.LogicalOrContext))
+	}
+	// safety fallback — should never happen with a valid grammar
+	result := v.VisitChildren(ctx)
+	if result == nil {
+		return environment.NewNil()
+	}
+	return result
+}
+
+func (v *FigVisitor) VisitLogicalAnd(ctx *parser.LogicalAndContext) interface{} {
+	// logicalAnd: equality ( AND equality )* ;
+	children := ctx.GetChildren()
+	var seq []antlr.Tree
+	for _, c := range children {
+		switch c.(type) {
+		case parser.IEqualityContext, antlr.TerminalNode:
+			seq = append(seq, c)
+		}
+	}
+	if len(seq) == 1 {
+		return v.VisitEquality(seq[0].(parser.IEqualityContext).(*parser.EqualityContext))
+	}
+	left := v.VisitEquality(seq[0].(parser.IEqualityContext).(*parser.EqualityContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+	for i := 1; i < len(seq); i += 2 {
+		op := seq[i].(antlr.TerminalNode)
+		// short-circuit: if left is falsey, return false without evaluating right
+		if !left.IsTruthy() && op.GetSymbol().GetTokenType() == parser.FigParserAND {
+			return environment.NewBool(false)
+		}
+		rightCtx := seq[i+1].(parser.IEqualityContext).(*parser.EqualityContext)
+		right := v.VisitEquality(rightCtx).(environment.Value)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		left = environment.NewBool(left.IsTruthy() && right.IsTruthy())
+	}
+	return left
+}
+
+func (v *FigVisitor) VisitLogicalOr(ctx *parser.LogicalOrContext) interface{} {
+	// logicalOr: logicalAnd ( OR logicalAnd )* ;
+	children := ctx.GetChildren()
+	var seq []antlr.Tree
+	for _, c := range children {
+		switch c.(type) {
+		case parser.ILogicalAndContext, antlr.TerminalNode:
+			seq = append(seq, c)
+		}
+	}
+	if len(seq) == 1 {
+		return v.VisitLogicalAnd(seq[0].(parser.ILogicalAndContext).(*parser.LogicalAndContext))
+	}
+	left := v.VisitLogicalAnd(seq[0].(parser.ILogicalAndContext).(*parser.LogicalAndContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+	for i := 1; i < len(seq); i += 2 {
+		tn := seq[i].(antlr.TerminalNode)
+		tok := tn.GetSymbol()
+		// short-circuit: if left is truthy, return true without evaluating right
+		if left.IsTruthy() && tok.GetTokenType() == parser.FigParserOR {
+			return environment.NewBool(true)
+		}
+		rightCtx := seq[i+1].(parser.ILogicalAndContext).(*parser.LogicalAndContext)
+		right := v.VisitLogicalAnd(rightCtx).(environment.Value)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		left = environment.NewBool(left.IsTruthy() || right.IsTruthy())
+	}
+	return left
+}
+
+func (v *FigVisitor) VisitEquality(ctx *parser.EqualityContext) interface{} {
+	// Build alternating sequence of comparison and operator nodes
+	children := ctx.GetChildren()
+	var seq []antlr.Tree
+	for _, c := range children {
+		switch c.(type) {
+		case parser.IComparisonContext, antlr.TerminalNode:
+			seq = append(seq, c)
+		}
+	}
+
+	if len(seq) == 1 {
+		return v.VisitComparison(seq[0].(parser.IComparisonContext).(*parser.ComparisonContext))
+	}
+
+	left := v.VisitComparison(seq[0].(parser.IComparisonContext).(*parser.ComparisonContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+	for i := 1; i < len(seq); i += 2 {
+		tn := seq[i].(antlr.TerminalNode)
+		tok := tn.GetSymbol()
+		rightCtx := seq[i+1].(parser.IComparisonContext).(*parser.ComparisonContext)
+		right := v.VisitComparison(rightCtx).(environment.Value)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		switch tok.GetTokenType() {
+		case parser.FigParserEQ:
+			left = environment.NewBool(valuesEqual(left, right))
+		case parser.FigParserNEQ:
+			left = environment.NewBool(!valuesEqual(left, right))
+		default:
+			v.RuntimeErr = v.makeRuntimeError(tok.GetLine(), tok.GetColumn(), fmt.Sprintf("unsupported equality operator: %v", tok.GetTokenType()), len(tok.GetText()))
+			return environment.NewNil()
+		}
+	}
+	return left
+}
+
+func (v *FigVisitor) VisitComparison(ctx *parser.ComparisonContext) interface{} {
+	children := ctx.GetChildren()
+	var seq []antlr.Tree
+	for _, c := range children {
+		switch c.(type) {
+		case parser.ITermContext, antlr.TerminalNode:
+			seq = append(seq, c)
+		}
+	}
+	if len(seq) == 1 {
+		return v.VisitTerm(seq[0].(parser.ITermContext).(*parser.TermContext))
+	}
+	left := v.VisitTerm(seq[0].(parser.ITermContext).(*parser.TermContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+	for i := 1; i < len(seq); i += 2 {
+		tn := seq[i].(antlr.TerminalNode)
+		tok := tn.GetSymbol()
+		rightCtx := seq[i+1].(parser.ITermContext).(*parser.TermContext)
+		right := v.VisitTerm(rightCtx).(environment.Value)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		switch tok.GetTokenType() {
+		case parser.FigParserGT:
+			ln, err := left.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(tok.GetLine(), tok.GetColumn(), err.Error(), len(tok.GetText()))
+				return environment.NewNil()
+			}
+			rn, err := right.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(tok.GetLine(), tok.GetColumn(), err.Error(), len(tok.GetText()))
+				return environment.NewNil()
+			}
+			left = environment.NewBool(ln > rn)
+		case parser.FigParserGE:
+			ln, err := left.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(tok.GetLine(), tok.GetColumn(), err.Error(), len(tok.GetText()))
+				return environment.NewNil()
+			}
+			rn, err := right.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(tok.GetLine(), tok.GetColumn(), err.Error(), len(tok.GetText()))
+				return environment.NewNil()
+			}
+			left = environment.NewBool(ln >= rn)
+		case parser.FigParserLT:
+			ln, err := left.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(tok.GetLine(), tok.GetColumn(), err.Error(), len(tok.GetText()))
+				return environment.NewNil()
+			}
+			rn, err := right.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(tok.GetLine(), tok.GetColumn(), err.Error(), len(tok.GetText()))
+				return environment.NewNil()
+			}
+			left = environment.NewBool(ln < rn)
+		case parser.FigParserLE:
+			ln, err := left.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(tok.GetLine(), tok.GetColumn(), err.Error(), len(tok.GetText()))
+				return environment.NewNil()
+			}
+			rn, err := right.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(tok.GetLine(), tok.GetColumn(), err.Error(), len(tok.GetText()))
+				return environment.NewNil()
+			}
+			left = environment.NewBool(ln <= rn)
+		default:
+			v.RuntimeErr = v.makeRuntimeError(tok.GetLine(), tok.GetColumn(), fmt.Sprintf("unsupported comparison operator: %v", tok.GetTokenType()), 1)
+			return environment.NewNil()
+		}
+	}
+	return left
+}
+
+func (v *FigVisitor) VisitTerm(ctx *parser.TermContext) interface{} {
+	children := ctx.GetChildren()
+	var seq []antlr.Tree
+	for _, c := range children {
+		switch c.(type) {
+		case parser.IFactorContext, antlr.TerminalNode:
+			seq = append(seq, c)
+		}
+	}
+	if len(seq) == 1 {
+		return v.VisitFactor(seq[0].(parser.IFactorContext).(*parser.FactorContext))
+	}
+	left := v.VisitFactor(seq[0].(parser.IFactorContext).(*parser.FactorContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+	for i := 1; i < len(seq); i += 2 {
+		op := seq[i].(antlr.TerminalNode)
+		rightCtx := seq[i+1].(parser.IFactorContext).(*parser.FactorContext)
+		right := v.VisitFactor(rightCtx).(environment.Value)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		switch op := op.GetSymbol().GetTokenType(); op {
+		case parser.FigParserPLUS:
+			// if either is string, concatenate
+			if left.Type == environment.StringType || right.Type == environment.StringType {
+				left = environment.NewString(left.String() + right.String())
+			} else {
+				ln, err := left.AsNumber()
+				if err != nil {
+					v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+					return environment.NewNil()
+				}
+				rn, err := right.AsNumber()
+				if err != nil {
+					v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+					return environment.NewNil()
+				}
+				left = environment.NewNumber(ln + rn)
+			}
+		case parser.FigParserMINUS:
+			ln, err := left.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+				return environment.NewNil()
+			}
+			rn, err := right.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+				return environment.NewNil()
+			}
+			left = environment.NewNumber(ln - rn)
+		default:
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), fmt.Sprintf("unsupported term operator: %v", op), 1)
+			return environment.NewNil()
+		}
+	}
+	return left
+}
+
+func (v *FigVisitor) VisitFactor(ctx *parser.FactorContext) interface{} {
+	children := ctx.GetChildren()
+	var seq []antlr.Tree
+	for _, c := range children {
+		switch c.(type) {
+		case parser.IUnaryContext, antlr.TerminalNode:
+			seq = append(seq, c)
+		}
+	}
+	if len(seq) == 1 {
+		return v.VisitUnary(seq[0].(parser.IUnaryContext).(*parser.UnaryContext))
+	}
+	left := v.VisitUnary(seq[0].(parser.IUnaryContext).(*parser.UnaryContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+	for i := 1; i < len(seq); i += 2 {
+		op := seq[i].(antlr.TerminalNode)
+		rightCtx := seq[i+1].(parser.IUnaryContext).(*parser.UnaryContext)
+		right := v.VisitUnary(rightCtx).(environment.Value)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		switch op := op.GetSymbol().GetTokenType(); op {
+		case parser.FigParserSTAR:
+			ln, err := left.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+				return environment.NewNil()
+			}
+			rn, err := right.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+				return environment.NewNil()
+			}
+			left = environment.NewNumber(ln * rn)
+		case parser.FigParserSLASH:
+			ln, err := left.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+				return environment.NewNil()
+			}
+			rn, err := right.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+				return environment.NewNil()
+			}
+			if rn == 0 {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "division by zero", 1)
+				return environment.NewNil()
+			}
+			left = environment.NewNumber(ln / rn)
+		case parser.FigParserMOD:
+			ln, err := left.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+				return environment.NewNil()
+			}
+			rn, err := right.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+				return environment.NewNil()
+			}
+			if rn == 0 {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "modulo by zero", 1)
+				return environment.NewNil()
+			}
+			left = environment.NewNumber(math.Mod(ln, rn))
+		default:
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), fmt.Sprintf("unsupported factor operator: %v", op), 1)
+			return environment.NewNil()
+		}
+	}
+	return left
+}
+
+func (v *FigVisitor) VisitUnary(ctx *parser.UnaryContext) interface{} {
+	// unary: ( MINUS | EXCLAM ) unary | primary ;
+	if ctx.GetChildCount() == 2 { // unary operator present
+		op := ctx.GetChild(0).(antlr.TerminalNode)
+		opText := op.GetSymbol().GetText()
+		child := ctx.GetChild(1).(parser.IUnaryContext).(*parser.UnaryContext)
+
+		// prefix ++/-- semantics: must apply to a simple ID (lvalue)
+		if opText == "++" || opText == "--" {
+			// navigate: unary -> postfix -> primary -> ID
+			if child.Postfix() != nil && child.Postfix().Primary() != nil && child.Postfix().Primary().ID() != nil {
+				name := child.Postfix().Primary().ID().GetText()
+				cur, ok := v.env.Get(name)
+				if !ok {
+					v.RuntimeErr = v.makeRuntimeError(child.GetStart().GetLine(), child.GetStart().GetColumn(), fmt.Sprintf("variable '%s' not defined", name), len(name))
+					return environment.NewNil()
+				}
+				n, err := cur.AsNumber()
+				if err != nil {
+					v.RuntimeErr = v.makeRuntimeError(child.GetStart().GetLine(), child.GetStart().GetColumn(), "invalid operand to increment/decrement", 1)
+					return environment.NewNil()
+				}
+				if opText == "++" {
+					n = n + 1
+				} else {
+					n = n - 1
+				}
+				if err := v.env.Assign(name, environment.NewNumber(n)); err != nil {
+					v.RuntimeErr = v.makeRuntimeError(child.GetStart().GetLine(), child.GetStart().GetColumn(), err.Error(), len(name))
+					return environment.NewNil()
+				}
+				return environment.NewNumber(n)
+			}
+			// otherwise, invalid prefix usage
+			v.RuntimeErr = v.makeRuntimeError(op.GetSymbol().GetLine(), op.GetSymbol().GetColumn(), fmt.Sprintf("invalid operand for '%s'", opText), len(opText))
+			return environment.NewNil()
+		}
+
+		// normal unary ops
+		val := v.VisitUnary(child).(environment.Value)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		switch op.GetSymbol().GetTokenType() {
+		case parser.FigParserMINUS:
+			n, err := val.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(op.GetSymbol().GetLine(), op.GetSymbol().GetColumn(), fmt.Sprintf("cannot negate %s", val.TypeName()), 1)
+				return environment.NewNil()
+			}
+			return environment.NewNumber(-n)
+		case parser.FigParserEXCLAM:
+			return environment.NewBool(!val.IsTruthy())
+		default:
+			v.RuntimeErr = v.makeRuntimeError(op.GetSymbol().GetLine(), op.GetSymbol().GetColumn(), fmt.Sprintf("unsupported unary operator '%s'", opText), len(opText))
+			return environment.NewNil()
+		}
+	}
+	return v.VisitPostfix(ctx.Postfix().(*parser.PostfixContext))
+}
+
+func (v *FigVisitor) VisitPrimary(ctx *parser.PrimaryContext) interface{} {
+	if ctx.NUMBER() != nil {
+		s := ctx.NUMBER().GetText()
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(s))
+			return environment.NewNil()
+		}
+		return environment.NewNumber(f)
+	}
+	if ctx.BOOL() != nil {
+		b, err := strconv.ParseBool(ctx.BOOL().GetText())
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(ctx.BOOL().GetText()))
+			return environment.NewNil()
+		}
+		return environment.NewBool(b)
+	}
+	if ctx.STRING() != nil {
+		text := ctx.STRING().GetText()
+		unq, err := strconv.Unquote(text)
+		if err != nil {
+			// try to handle single-quoted strings
+			if len(text) >= 2 && text[0] == '\'' && text[len(text)-1] == '\'' {
+				unq = text[1 : len(text)-1]
+			} else {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+				return environment.NewNil()
+			}
+		}
+		return environment.NewString(unq)
+	}
+	if ctx.TK_NULL() != nil {
+		return environment.NewNil()
+	}
+	if ctx.TK_THIS() != nil {
+		thisVal, ok := v.env.Get("this")
+		if !ok {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+				"'this' used outside of a method", 4)
+			return environment.NewNil()
+		}
+		return thisVal
+	}
+	if ctx.ArrayLiteral() != nil {
+		return v.VisitArrayLiteral(ctx.ArrayLiteral().(*parser.ArrayLiteralContext))
+	}
+	if ctx.ObjectLiteral() != nil {
+		return v.VisitObjectLiteral(ctx.ObjectLiteral().(*parser.ObjectLiteralContext))
+	}
+	// ── anonymous function expression: fn(params) block ──
+	if ctx.TK_FN() != nil {
+		var params []string
+		if ctx.FnParams() != nil {
+			fp := ctx.FnParams().(*parser.FnParamsContext)
+			for _, p := range fp.AllID() {
+				params = append(params, p.GetText())
+			}
+		}
+		fd := &environment.FuncDef{
+			Name:       "<anonymous>",
+			Params:     params,
+			Body:       ctx.Block().(*parser.BlockContext),
+			ClosureEnv: v.env,
+		}
+		return environment.NewFunction(fd)
+	}
+	if ctx.ID() != nil {
+		name := ctx.ID().GetText()
+
+		// ── function call or struct instantiation: ID LPAREN fnArgs? RPAREN ──
+		if ctx.LPAREN() != nil {
+			fnVal, ok := v.env.Get(name)
+			if !ok {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), fmt.Sprintf("'%s' not defined", name), len(name))
+				return environment.NewNil()
+			}
+			args := v.evaluateArgs(ctx.FnArgs())
+			if v.RuntimeErr != nil {
+				return environment.NewNil()
+			}
+
+			// struct instantiation
+			if fnVal.Type == environment.StructDefType {
+				return v.instantiateStruct(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), fnVal.Struct, args)
+			}
+
+			return v.callFunction(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), fnVal, args).(environment.Value)
+		}
+
+		// ── postfix ++/-- ──
+		var postfix string
+		for _, c := range ctx.GetChildren() {
+			switch t := c.(type) {
+			case antlr.TerminalNode:
+				if t.GetSymbol().GetText() == "++" || t.GetSymbol().GetText() == "--" {
+					postfix = t.GetSymbol().GetText()
+				}
+			}
+		}
+		val, ok := v.env.Get(name)
+		if !ok {
+			v.RuntimeErr = v.makeRuntimeError(ctx.ID().GetSymbol().GetLine(), ctx.ID().GetSymbol().GetColumn(), fmt.Sprintf("variable '%s' not defined", name), len(name))
+			return environment.NewNil()
+		}
+		if postfix != "" {
+			n, err := val.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.ID().GetSymbol().GetLine(), ctx.ID().GetSymbol().GetColumn(), "invalid operand to increment/decrement", 1)
+				return environment.NewNil()
+			}
+			old := n
+			if postfix == "++" {
+				n = n + 1
+			} else {
+				n = n - 1
+			}
+			if err := v.env.Assign(name, environment.NewNumber(n)); err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.ID().GetSymbol().GetLine(), ctx.ID().GetSymbol().GetColumn(), err.Error(), len(name))
+				return environment.NewNil()
+			}
+			return environment.NewNumber(old)
+		}
+		return val
+	}
+	if ctx.LPAREN() != nil {
+		return v.VisitExpr(ctx.Expr().(*parser.ExprContext))
+	}
+	return environment.NewNil()
+}
+
+// instantiateStruct creates a new instance of a struct, initializing fields and calling init if present.
+func (v *FigVisitor) instantiateStruct(line, col int, sd *environment.StructDef, args []environment.Value) environment.Value {
+	// Create instance with fields set to defaults
+	entries := make(map[string]environment.Value)
+	var keys []string
+	for _, f := range sd.Fields {
+		entries[f.Name] = f.Default
+		keys = append(keys, f.Name)
+	}
+	inst := &environment.Instance{
+		Def:    sd,
+		Fields: &environment.ObjData{Entries: entries, Keys: keys},
+	}
+	instVal := environment.NewInstance(inst)
+
+	// Call init if defined
+	if initMethod, ok := sd.Methods["init"]; ok {
+		if len(args) != len(initMethod.Params) {
+			v.RuntimeErr = v.makeRuntimeError(line, col,
+				fmt.Sprintf("'%s' init expects %d argument(s), got %d", sd.Name, len(initMethod.Params), len(args)), len(sd.Name))
+			return environment.NewNil()
+		}
+		v.callMethod(line, col, instVal, environment.NewFunction(initMethod), args)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+	} else if len(args) > 0 {
+		v.RuntimeErr = v.makeRuntimeError(line, col,
+			fmt.Sprintf("'%s' does not accept constructor arguments (no init method)", sd.Name), len(sd.Name))
+		return environment.NewNil()
+	}
+
+	return instVal
+}
+
+// callMethod calls a method on an instance, binding "this" in the method scope.
+func (v *FigVisitor) callMethod(line, col int, receiver environment.Value, fnVal environment.Value, args []environment.Value) environment.Value {
+	if fnVal.Type != environment.FunctionType || fnVal.Func == nil {
+		v.RuntimeErr = v.makeRuntimeError(line, col, "not a method", 1)
+		return environment.NewNil()
+	}
+	fd := fnVal.Func
+	name := fd.Name
+
+	if len(args) != len(fd.Params) {
+		v.RuntimeErr = v.makeRuntimeError(line, col,
+			fmt.Sprintf("'%s' expects %d argument(s), got %d", name, len(fd.Params), len(args)), len(name))
+		return environment.NewNil()
+	}
+
+	prevEnv := v.env
+	v.env = environment.NewEnv(fd.ClosureEnv)
+	v.env.Define("this", receiver) // bind "this" to the instance
+	for i, param := range fd.Params {
+		v.env.Define(param, args[i])
+	}
+
+	blockCtx := fd.Body.(*parser.BlockContext)
+	result := v.visitBlockRaw(blockCtx)
+	v.env = prevEnv
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+	if ret, ok := result.(returnSignal); ok {
+		return ret.value
+	}
+	return environment.NewNil()
+}
+
+// callFunction evaluates a function call using a resolved Value and arguments.
+func (v *FigVisitor) callFunction(line, col int, fnVal environment.Value, args []environment.Value) interface{} {
+	// Handle builtin functions
+	if fnVal.Type == environment.BuiltinFnType {
+		if fnVal.Builtin == nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, "builtin function is nil", 1)
+			return environment.NewNil()
+		}
+		result, err := fnVal.Builtin(args)
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, err.Error(), len(fnVal.BName))
+			return environment.NewNil()
+		}
+		return result
+	}
+
+	name := "<anonymous>"
+	if fnVal.Func != nil {
+		name = fnVal.Func.Name
+	}
+	if fnVal.Type != environment.FunctionType || fnVal.Func == nil {
+		v.RuntimeErr = v.makeRuntimeError(line, col, fmt.Sprintf("'%s' is not a function", name), len(name))
+		return environment.NewNil()
+	}
+	fd := fnVal.Func
+
+	// arity check
+	if len(args) != len(fd.Params) {
+		v.RuntimeErr = v.makeRuntimeError(line, col,
+			fmt.Sprintf("'%s' expects %d argument(s), got %d", name, len(fd.Params), len(args)), len(name))
+		return environment.NewNil()
+	}
+
+	// create a new scope for the function call (closure over the definition-time env)
+	prevEnv := v.env
+	v.env = environment.NewEnv(fd.ClosureEnv) // functions close over definition-time scope
+	for i, param := range fd.Params {
+		v.env.Define(param, args[i])
+	}
+
+	// execute the body
+	blockCtx := fd.Body.(*parser.BlockContext)
+	result := v.visitBlockRaw(blockCtx) // raw: without extra pushEnv (we already set up the scope)
+	v.env = prevEnv
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+
+	// unwrap return signal
+	if ret, ok := result.(returnSignal); ok {
+		return ret.value
+	}
+	return environment.NewNil()
+}
+
+// evaluateArgs evaluates a FnArgsContext into a slice of Values.
+func (v *FigVisitor) evaluateArgs(argsCtx parser.IFnArgsContext) []environment.Value {
+	var args []environment.Value
+	if argsCtx != nil {
+		ac := argsCtx.(*parser.FnArgsContext)
+		for _, e := range ac.AllExpr() {
+			val := v.VisitExpr(e.(*parser.ExprContext)).(environment.Value)
+			if v.RuntimeErr != nil {
+				return nil
+			}
+			args = append(args, val)
+		}
+	}
+	return args
+}
+
+// VisitPostfix handles chained member access: primary ( [expr] | .ID | (args) )*
+func (v *FigVisitor) VisitPostfix(ctx *parser.PostfixContext) interface{} {
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+	val := v.VisitPrimary(ctx.Primary().(*parser.PrimaryContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return val
+	}
+
+	// receiver tracks the instance when DOT accesses a method, so LPAREN can bind "this"
+	var receiver *environment.Value
+
+	// iterate through suffix children: LBRACKET/DOT/LPAREN
+	children := ctx.GetChildren()
+	i := 1 // skip primary (child 0)
+	for i < len(children) {
+		c := children[i]
+		tn, ok := c.(antlr.TerminalNode)
+		if !ok {
+			i++
+			continue
+		}
+		tok := tn.GetSymbol()
+		switch tok.GetTokenType() {
+		case parser.FigParserLBRACKET:
+			// index access: [expr]
+			receiver = nil
+			i++ // skip [
+			exprNode := children[i]
+			idx := v.VisitExpr(exprNode.(*parser.ExprContext)).(environment.Value)
+			if v.RuntimeErr != nil {
+				return environment.NewNil()
+			}
+			i++ // skip ]
+			val = v.indexAccess(tok.GetLine(), tok.GetColumn(), val, idx)
+			if v.RuntimeErr != nil {
+				return environment.NewNil()
+			}
+		case parser.FigParserDOT:
+			// dot access: .ID
+			i++ // skip .
+			idNode := children[i].(antlr.TerminalNode)
+			key := idNode.GetText()
+			// track receiver for method calls on instances
+			if val.Type == environment.InstanceType {
+				recv := val
+				receiver = &recv
+			} else {
+				receiver = nil
+			}
+			val = v.dotAccess(tok.GetLine(), tok.GetColumn(), val, key)
+			if v.RuntimeErr != nil {
+				return environment.NewNil()
+			}
+		case parser.FigParserLPAREN:
+			// function call: (args)
+			i++ // skip (
+			// find FnArgs if present
+			var args []environment.Value
+			if next, ok := children[i].(parser.IFnArgsContext); ok {
+				args = v.evaluateArgs(next)
+				if v.RuntimeErr != nil {
+					return environment.NewNil()
+				}
+				i++ // skip fnArgs
+			}
+			i++ // skip )
+
+			// struct instantiation in postfix chain
+			if val.Type == environment.StructDefType {
+				val = v.instantiateStruct(tok.GetLine(), tok.GetColumn(), val.Struct, args)
+				receiver = nil
+				if v.RuntimeErr != nil {
+					return environment.NewNil()
+				}
+			} else if receiver != nil && val.Type == environment.FunctionType {
+				// method call: inject "this"
+				val = v.callMethod(tok.GetLine(), tok.GetColumn(), *receiver, val, args)
+				receiver = nil
+				if v.RuntimeErr != nil {
+					return environment.NewNil()
+				}
+			} else {
+				receiver = nil
+				val = v.callFunction(tok.GetLine(), tok.GetColumn(), val, args).(environment.Value)
+				if v.RuntimeErr != nil {
+					return environment.NewNil()
+				}
+			}
+		default:
+			i++
+		}
+		i++
+	}
+	return val
+}
+
+// indexAccess returns the element at index of an array or object.
+func (v *FigVisitor) indexAccess(line, col int, container, index environment.Value) environment.Value {
+	switch container.Type {
+	case environment.ArrayType:
+		n, err := index.AsNumber()
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, "array index must be a number", 1)
+			return environment.NewNil()
+		}
+		idx := int(n)
+		arr := *container.Arr
+		if idx < 0 || idx >= len(arr) {
+			v.RuntimeErr = v.makeRuntimeError(line, col, fmt.Sprintf("array index %d out of range (length %d)", idx, len(arr)), 1)
+			return environment.NewNil()
+		}
+		return arr[idx]
+	case environment.ObjectType:
+		key := index.String()
+		if val, ok := container.Obj.Entries[key]; ok {
+			return val
+		}
+		return environment.NewNil()
+	default:
+		v.RuntimeErr = v.makeRuntimeError(line, col, fmt.Sprintf("cannot index into %s", container.TypeName()), 1)
+		return environment.NewNil()
+	}
+}
+
+// dotAccess returns the value of a property of an object or instance.
+func (v *FigVisitor) dotAccess(line, col int, container environment.Value, key string) environment.Value {
+	switch container.Type {
+	case environment.ObjectType:
+		if container.Obj == nil {
+			return environment.NewNil()
+		}
+		if val, ok := container.Obj.Entries[key]; ok {
+			return val
+		}
+		return environment.NewNil()
+	case environment.InstanceType:
+		inst := container.Inst
+		if inst == nil || inst.Fields == nil || inst.Def == nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, "cannot access property on invalid instance", 1)
+			return environment.NewNil()
+		}
+		// first check instance fields
+		if val, ok := inst.Fields.Entries[key]; ok {
+			return val
+		}
+		// then check struct methods
+		if method, ok := inst.Def.Methods[key]; ok {
+			return environment.NewFunction(method)
+		}
+		return environment.NewNil()
+	default:
+		v.RuntimeErr = v.makeRuntimeError(line, col, fmt.Sprintf("cannot access property '%s' on %s", key, container.TypeName()), 1)
+		return environment.NewNil()
+	}
+}
+
+// VisitArrayLiteral evaluates [expr, expr, ...]
+func (v *FigVisitor) VisitArrayLiteral(ctx *parser.ArrayLiteralContext) interface{} {
+	var elems []environment.Value
+	for _, e := range ctx.AllExpr() {
+		val := v.VisitExpr(e.(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		elems = append(elems, val)
+	}
+	return environment.NewArray(elems)
+}
+
+// VisitObjectLiteral evaluates {key: value, ...}
+func (v *FigVisitor) VisitObjectLiteral(ctx *parser.ObjectLiteralContext) interface{} {
+	entries := make(map[string]environment.Value)
+	var keys []string
+	for _, entry := range ctx.AllObjectEntry() {
+		ec := entry.(*parser.ObjectEntryContext)
+		var key string
+		if ec.ID() != nil {
+			key = ec.ID().GetText()
+		} else if ec.STRING() != nil {
+			text := ec.STRING().GetText()
+			unq, err := strconv.Unquote(text)
+			if err != nil {
+				if len(text) >= 2 && text[0] == '\'' && text[len(text)-1] == '\'' {
+					unq = text[1 : len(text)-1]
+				} else {
+					v.RuntimeErr = v.makeRuntimeError(ec.GetStart().GetLine(), ec.GetStart().GetColumn(), err.Error(), 1)
+					return environment.NewNil()
+				}
+			}
+			key = unq
+		}
+		val := v.VisitExpr(ec.Expr().(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		if _, exists := entries[key]; !exists {
+			keys = append(keys, key)
+		}
+		entries[key] = val
+	}
+	return environment.NewObject(entries, keys)
+}
+
+// VisitMemberAssign handles assignments like a[0] = x; or obj.name = x;
+func (v *FigVisitor) VisitMemberAssign(ctx *parser.MemberAssignContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	// Parse the access chain from the children.
+	// The structure is: expr (access)+ ASSIGN expr SEMICOLON?
+	// The first expr gives us the base, the accesses give us the chain,
+	// and the last expr is the value to assign.
+	allExprs := ctx.AllExpr()
+	if len(allExprs) < 2 {
+		return nil
+	}
+
+	// The value to assign is the expr right after ASSIGN (second-to-last meaningful expr)
+	// In the grammar: expr (LBRACKET expr RBRACKET | DOT ID)+ ASSIGN expr SEMICOLON?
+	// allExprs includes: base expr, index exprs, and the RHS value expr
+	rhs := v.VisitExpr(allExprs[len(allExprs)-1].(*parser.ExprContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	// Build the access chain from children
+	type accessStep struct {
+		isIndex bool
+		key     string            // for dot access
+		idx     environment.Value // for index access
+	}
+
+	var chain []accessStep
+	base := v.VisitExpr(allExprs[0].(*parser.ExprContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	// Walk children to build access chain
+	children := ctx.GetChildren()
+	exprIdx := 1 // skip base expr (index 0), the exprs in brackets are 1..n-2, last is RHS
+	for i := 0; i < len(children); i++ {
+		tn, ok := children[i].(antlr.TerminalNode)
+		if !ok {
+			continue
+		}
+		tok := tn.GetSymbol()
+		switch tok.GetTokenType() {
+		case parser.FigParserLBRACKET:
+			// next expr is the index
+			if exprIdx < len(allExprs)-1 {
+				idx := v.VisitExpr(allExprs[exprIdx].(*parser.ExprContext)).(environment.Value)
+				if v.RuntimeErr != nil {
+					return nil
+				}
+				chain = append(chain, accessStep{isIndex: true, idx: idx})
+				exprIdx++
+			}
+		case parser.FigParserDOT:
+			// next terminal is the ID
+			for j := i + 1; j < len(children); j++ {
+				if idTn, ok := children[j].(antlr.TerminalNode); ok && idTn.GetSymbol().GetTokenType() == parser.FigParserID {
+					chain = append(chain, accessStep{isIndex: false, key: idTn.GetText()})
+					i = j
+					break
+				}
+			}
+		}
+	}
+
+	if len(chain) == 0 {
+		return nil
+	}
+
+	// Navigate to the container (all but last step)
+	container := base
+	for i := 0; i < len(chain)-1; i++ {
+		step := chain[i]
+		if step.isIndex {
+			container = v.indexAccess(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), container, step.idx)
+		} else {
+			container = v.dotAccess(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), container, step.key)
+		}
+		if v.RuntimeErr != nil {
+			return nil
+		}
+	}
+
+	// Apply the last step as assignment
+	last := chain[len(chain)-1]
+	if last.isIndex {
+		switch container.Type {
+		case environment.ArrayType:
+			n, err := last.idx.AsNumber()
+			if err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "array index must be a number", 1)
+				return nil
+			}
+			idx := int(n)
+			arr := *container.Arr
+			if idx < 0 {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+					fmt.Sprintf("array index %d out of range (length %d)", idx, len(arr)), 1)
+				return nil
+			}
+			if idx >= len(arr) {
+				// Auto-grow: fill gaps with null
+				for len(*container.Arr) <= idx {
+					*container.Arr = append(*container.Arr, environment.NewNil())
+				}
+			}
+			(*container.Arr)[idx] = rhs
+		case environment.ObjectType:
+			key := last.idx.String()
+			if _, exists := container.Obj.Entries[key]; !exists {
+				container.Obj.Keys = append(container.Obj.Keys, key)
+			}
+			container.Obj.Entries[key] = rhs
+		default:
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+				fmt.Sprintf("cannot index into %s", container.TypeName()), 1)
+		}
+	} else {
+		switch container.Type {
+		case environment.ObjectType:
+			if _, exists := container.Obj.Entries[last.key]; !exists {
+				container.Obj.Keys = append(container.Obj.Keys, last.key)
+			}
+			container.Obj.Entries[last.key] = rhs
+		case environment.InstanceType:
+			inst := container.Inst
+			if _, exists := inst.Fields.Entries[last.key]; !exists {
+				inst.Fields.Keys = append(inst.Fields.Keys, last.key)
+			}
+			inst.Fields.Entries[last.key] = rhs
+		default:
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+				fmt.Sprintf("cannot set property '%s' on %s", last.key, container.TypeName()), 1)
+			return nil
+		}
+	}
+	return nil
+}
+
+// visitBlockRaw executes a block's statements in the current env (no push/pop).
+func (v *FigVisitor) visitBlockRaw(ctx *parser.BlockContext) interface{} {
+	for _, st := range ctx.AllStatements() {
+		res := v.VisitStatements(st.(*parser.StatementsContext))
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if sig, ok := res.(loopSignal); ok {
+			return sig
+		}
+		if ret, ok := res.(returnSignal); ok {
+			return ret
+		}
+	}
+	return nil
+}
+
+// VisitFnDecl handles function declarations: fn name(params) { body }
+func (v *FigVisitor) VisitFnDecl(ctx *parser.FnDeclContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	name := ctx.ID().GetText()
+
+	// collect parameter names
+	var params []string
+	if ctx.FnParams() != nil {
+		paramsCtx := ctx.FnParams().(*parser.FnParamsContext)
+		for _, id := range paramsCtx.AllID() {
+			params = append(params, id.GetText())
+		}
+	}
+
+	fd := &environment.FuncDef{
+		Name:       name,
+		Params:     params,
+		Body:       ctx.Block(),
+		ClosureEnv: v.env, // capture the definition-time environment
+	}
+	if err := v.env.Define(name, environment.NewFunction(fd)); err != nil {
+		// allow redefinition of functions (overwrite)
+		v.env.Set(name, environment.NewFunction(fd))
+	}
+	return nil
+}
+
+// VisitReturnStmt handles return statements.
+func (v *FigVisitor) VisitReturnStmt(ctx *parser.ReturnStmtContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	if ctx.Expr() != nil {
+		val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		return returnSignal{value: val}
+	}
+	return returnSignal{value: environment.NewNil()}
+}
+
+func (v *FigVisitor) VisitBlock(ctx *parser.BlockContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	// execute block in a fresh local environment
+	v.pushEnv()
+	defer v.popEnv()
+	for _, st := range ctx.AllStatements() {
+		res := v.VisitStatements(st.(*parser.StatementsContext))
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if sig, ok := res.(loopSignal); ok {
+			// propagate loop control signals up to the enclosing loop
+			return sig
+		}
+		if ret, ok := res.(returnSignal); ok {
+			return ret
+		}
+	}
+	return nil
+}
+
+func (v *FigVisitor) VisitWhileStmt(ctx *parser.WhileStmtContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	v.loopDepth++
+	defer func() { v.loopDepth-- }()
+	for {
+		cond := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if !cond.IsTruthy() {
+			break
+		}
+		res := v.VisitBlock(ctx.Block().(*parser.BlockContext))
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if ret, ok := res.(returnSignal); ok {
+			return ret
+		}
+		if sig, ok := res.(loopSignal); ok {
+			if sig == loopBreak {
+				break
+			}
+			if sig == loopContinue {
+				// on continue, execute step semantics if any (for while there is none)
+				continue
+			}
+		}
+	}
+	return nil
+}
+
+// execForStep executes the step expression of a for loop (e.g. n = n + 1).
+func (v *FigVisitor) execForStep(ctx *parser.ForStmtContext) {
+	fs := ctx.ForStep()
+	if fs == nil || v.RuntimeErr != nil {
+		return
+	}
+	if fs.ASSIGN() != nil {
+		name := fs.ID().GetText()
+		val := v.VisitExpr(fs.Expr().(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return
+		}
+		if err := v.env.Assign(name, val); err != nil {
+			v.RuntimeErr = v.makeRuntimeError(fs.GetStart().GetLine(), fs.GetStart().GetColumn(), err.Error(), len(name))
+		}
+	} else if fs.Expr() != nil {
+		v.VisitExpr(fs.Expr().(*parser.ExprContext))
+	}
+}
+
+func (v *FigVisitor) VisitForStmt(ctx *parser.ForStmtContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	v.pushEnv() // for-loop introduces its own scope for the init variable
+	defer v.popEnv()
+
+	// ── init ──
+	if fi := ctx.ForInit(); fi != nil {
+		if fi.TK_LET() != nil {
+			name := fi.ID().GetText()
+			if fi.Expr() != nil {
+				val := v.VisitExpr(fi.Expr().(*parser.ExprContext)).(environment.Value)
+				if v.RuntimeErr != nil {
+					return nil
+				}
+				if err := v.env.Define(name, val); err != nil {
+					v.RuntimeErr = v.makeRuntimeError(fi.GetStart().GetLine(), fi.GetStart().GetColumn(), err.Error(), len(name))
+					return nil
+				}
+			} else {
+				if err := v.env.Define(name, environment.NewNil()); err != nil {
+					v.RuntimeErr = v.makeRuntimeError(fi.GetStart().GetLine(), fi.GetStart().GetColumn(), err.Error(), len(name))
+					return nil
+				}
+			}
+		} else if fi.ASSIGN() != nil {
+			name := fi.ID().GetText()
+			val := v.VisitExpr(fi.Expr().(*parser.ExprContext)).(environment.Value)
+			if v.RuntimeErr != nil {
+				return nil
+			}
+			if err := v.env.Assign(name, val); err != nil {
+				v.RuntimeErr = v.makeRuntimeError(fi.GetStart().GetLine(), fi.GetStart().GetColumn(), err.Error(), len(name))
+				return nil
+			}
+		} else if fi.Expr() != nil {
+			v.VisitExpr(fi.Expr().(*parser.ExprContext))
+			if v.RuntimeErr != nil {
+				return nil
+			}
+		}
+	}
+
+	// ── loop ──
+	v.loopDepth++
+	defer func() { v.loopDepth-- }()
+
+	for {
+		// condition (absent = always true)
+		if e := ctx.Expr(); e != nil {
+			cond := v.VisitExpr(e.(*parser.ExprContext)).(environment.Value)
+			if v.RuntimeErr != nil {
+				return nil
+			}
+			if !cond.IsTruthy() {
+				break
+			}
+		}
+
+		// body
+		res := v.VisitBlock(ctx.Block().(*parser.BlockContext))
+		if v.RuntimeErr != nil {
+			return nil
+		}
+
+		if ret, ok := res.(returnSignal); ok {
+			return ret
+		}
+
+		if sig, ok := res.(loopSignal); ok {
+			if sig == loopBreak {
+				break
+			}
+			// loopContinue: execute step, then next iteration
+			v.execForStep(ctx)
+			if v.RuntimeErr != nil {
+				return nil
+			}
+			continue
+		}
+
+		// normal end of body: execute step
+		v.execForStep(ctx)
+		if v.RuntimeErr != nil {
+			return nil
+		}
+	}
+	return nil
+}
+
+// ── for x in range(start, end) { } ──
+// ── for x in range(start, end, step) { } ──
+func (v *FigVisitor) VisitForRange(ctx *parser.ForRangeContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	varName := ctx.ID().GetText()
+	exprs := ctx.AllExpr()
+
+	startVal := v.VisitExpr(exprs[0].(*parser.ExprContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	endVal := v.VisitExpr(exprs[1].(*parser.ExprContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	if startVal.Type != environment.NumberType || endVal.Type != environment.NumberType {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			"range() arguments must be numbers", 5)
+		return nil
+	}
+
+	start := startVal.Num
+	end := endVal.Num
+	step := 1.0
+
+	if len(exprs) == 3 {
+		stepVal := v.VisitExpr(exprs[2].(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if stepVal.Type != environment.NumberType {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+				"range() step must be a number", 5)
+			return nil
+		}
+		step = stepVal.Num
+		if step == 0 {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+				"range() step cannot be zero", 5)
+			return nil
+		}
+	} else if start > end {
+		step = -1.0
+	}
+
+	v.pushEnv()
+	defer v.popEnv()
+
+	if err := v.env.Define(varName, environment.NewNumber(start)); err != nil {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(varName))
+		return nil
+	}
+
+	v.loopDepth++
+	defer func() { v.loopDepth-- }()
+
+	for i := start; (step > 0 && i < end) || (step < 0 && i > end); i += step {
+		v.env.Assign(varName, environment.NewNumber(i))
+
+		res := v.VisitBlock(ctx.Block().(*parser.BlockContext))
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if ret, ok := res.(returnSignal); ok {
+			return ret
+		}
+		if sig, ok := res.(loopSignal); ok {
+			if sig == loopBreak {
+				break
+			}
+			// continue
+		}
+	}
+	return nil
+}
+
+// ── for idx, val in enumerate(expr) { } ──
+func (v *FigVisitor) VisitForEnumerate(ctx *parser.ForEnumerateContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	idxName := ctx.ID(0).GetText()
+	valName := ctx.ID(1).GetText()
+
+	iterVal := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	if iterVal.Type != environment.ArrayType {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			"enumerate() argument must be an array", 9)
+		return nil
+	}
+
+	arr := *iterVal.Arr
+
+	v.pushEnv()
+	defer v.popEnv()
+
+	if err := v.env.Define(idxName, environment.NewNumber(0)); err != nil {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(idxName))
+		return nil
+	}
+	if err := v.env.Define(valName, environment.NewNil()); err != nil {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(valName))
+		return nil
+	}
+
+	v.loopDepth++
+	defer func() { v.loopDepth-- }()
+
+	for i, elem := range arr {
+		v.env.Assign(idxName, environment.NewNumber(float64(i)))
+		v.env.Assign(valName, elem)
+
+		res := v.VisitBlock(ctx.Block().(*parser.BlockContext))
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if ret, ok := res.(returnSignal); ok {
+			return ret
+		}
+		if sig, ok := res.(loopSignal); ok {
+			if sig == loopBreak {
+				break
+			}
+			// continue
+		}
+	}
+	return nil
+}
+
+// ── for x in expr { } ── (iterates over array elements)
+func (v *FigVisitor) VisitForIn(ctx *parser.ForInContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	varName := ctx.ID().GetText()
+
+	iterVal := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	if iterVal.Type != environment.ArrayType {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			"for..in requires an array", 3)
+		return nil
+	}
+
+	arr := *iterVal.Arr
+
+	v.pushEnv()
+	defer v.popEnv()
+
+	if err := v.env.Define(varName, environment.NewNil()); err != nil {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(varName))
+		return nil
+	}
+
+	v.loopDepth++
+	defer func() { v.loopDepth-- }()
+
+	for _, elem := range arr {
+		v.env.Assign(varName, elem)
+
+		res := v.VisitBlock(ctx.Block().(*parser.BlockContext))
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if ret, ok := res.(returnSignal); ok {
+			return ret
+		}
+		if sig, ok := res.(loopSignal); ok {
+			if sig == loopBreak {
+				break
+			}
+			// continue
+		}
+	}
+	return nil
+}
+
+func (v *FigVisitor) VisitDoWhileStmt(ctx *parser.DoWhileStmtContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	v.loopDepth++
+	defer func() { v.loopDepth-- }()
+	for {
+		res := v.VisitBlock(ctx.Block().(*parser.BlockContext))
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if ret, ok := res.(returnSignal); ok {
+			return ret
+		}
+		if sig, ok := res.(loopSignal); ok {
+			if sig == loopBreak {
+				break
+			}
+			if sig == loopContinue {
+				// continue to re-evaluate condition
+			}
+		}
+		cond := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if !cond.IsTruthy() {
+			break
+		}
+	}
+	return nil
+}
+
+func (v *FigVisitor) VisitBreakStmt(ctx *parser.BreakStmtContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	if v.loopDepth == 0 {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "'break' não permitido fora de loop", len("break"))
+		return nil
+	}
+	return loopBreak
+}
+
+func (v *FigVisitor) VisitContinueStmt(ctx *parser.ContinueStmtContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	if v.loopDepth == 0 {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "'continue' não permitido fora de loop", len("continue"))
+		return nil
+	}
+	return loopContinue
+}
+
+func (v *FigVisitor) VisitIfStmt(ctx *parser.IfStmtContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	exprs := ctx.AllExpr()
+	blocks := ctx.AllBlock()
+	// evaluate if and elif branches in order
+	for i := 0; i < len(exprs); i++ {
+		cond := v.VisitExpr(exprs[i].(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if cond.IsTruthy() {
+			res := v.VisitBlock(blocks[i].(*parser.BlockContext))
+			if sig, ok := res.(loopSignal); ok {
+				return sig
+			}
+			if ret, ok := res.(returnSignal); ok {
+				return ret
+			}
+			return nil
+		}
+	}
+	// optional else
+	if len(blocks) > len(exprs) {
+		res := v.VisitBlock(blocks[len(blocks)-1].(*parser.BlockContext))
+		if sig, ok := res.(loopSignal); ok {
+			return sig
+		}
+		if ret, ok := res.(returnSignal); ok {
+			return ret
+		}
+	}
+	return nil
+}
+
+// valuesEqual compares two Values for equality by type and content.
+func valuesEqual(a, b environment.Value) bool {
+	if a.Type != b.Type {
+		return false
+	}
+	switch a.Type {
+	case environment.NumberType:
+		aNum, _ := a.AsNumber()
+		bNum, _ := b.AsNumber()
+		return aNum == bNum
+	case environment.StringType:
+		return a.Str == b.Str
+	case environment.BooleanType:
+		return a.Bool == b.Bool
+	case environment.NilType:
+		return true
+	case environment.ArrayType:
+		if a.Arr == nil && b.Arr == nil {
+			return true
+		}
+		if a.Arr == nil || b.Arr == nil {
+			return false
+		}
+		aa, bb := *a.Arr, *b.Arr
+		if len(aa) != len(bb) {
+			return false
+		}
+		for i := range aa {
+			if !valuesEqual(aa[i], bb[i]) {
+				return false
+			}
+		}
+		return true
+	case environment.ObjectType:
+		if a.Obj == nil && b.Obj == nil {
+			return true
+		}
+		if a.Obj == nil || b.Obj == nil {
+			return false
+		}
+		if len(a.Obj.Entries) != len(b.Obj.Entries) {
+			return false
+		}
+		for k, va := range a.Obj.Entries {
+			vb, ok := b.Obj.Entries[k]
+			if !ok || !valuesEqual(va, vb) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}

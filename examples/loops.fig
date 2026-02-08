@@ -1,0 +1,28 @@
+# Exemplos de laços (while / do-while) e break/continue
+
+# while básico
+let i = 0;
+while (i < 3) {
+    print(i);
+    i = i + 1;
+}
+
+# continue e break
+let j = 0;
+while (j < 6) {
+    j = j + 1;
+    if (j % 2 == 0) { continue; }
+    if (j == 5) { break; }
+    print(j);
+}
+
+# do-while
+let k = 0;
+do {
+    print(k);
+    k = k + 1;
+} while (k < 2);
+
+# break/continue fora de loop -> erro (descomente para testar)
+# break;
+# continue;

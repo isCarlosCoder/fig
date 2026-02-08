@@ -1,0 +1,34 @@
+use "types"
+
+print(types.type(42))
+print(types.type("hello"))
+print(types.type(true))
+print(types.type([1, 2]))
+print(types.type({ a: 1 }))
+print(types.type(null))
+
+print(types.isNumber(42))
+print(types.isNumber("no"))
+print(types.isString("yes"))
+print(types.isBool(false))
+print(types.isArray([1]))
+print(types.isObject({ x: 1 }))
+print(types.isNil(null))
+print(types.isNil(0))
+
+print(types.toInt(3.7))
+print(types.toInt("42"))
+print(types.toInt(true))
+
+print(types.toFloat("3.14"))
+print(types.toFloat(false))
+
+print(types.toString(123))
+print(types.toString(true))
+print(types.toString(null))
+
+print(types.toBool(0))
+print(types.toBool(1))
+print(types.toBool(""))
+print(types.toBool("fig"))
+print(types.toBool(null))

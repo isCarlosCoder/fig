@@ -1,0 +1,81 @@
+# examples/functions.fig
+
+# Null literal
+let x = null;
+print(x);
+
+# Simple function and call
+fn hello() {
+  print("Hello from function");
+}
+hello();
+
+# Function with params
+fn add(a, b) {
+  return a + b;
+}
+print(add(2, 3));
+
+# Local vars and scope
+fn square(x) {
+  let y = x * x;
+  return y;
+}
+print(square(6));
+
+# Conditional in function
+fn sign(n) {
+  if (n > 0) { return 1; } elif (n < 0) { return -1; } else { return 0; }
+}
+print(sign(-10));
+print(sign(0));
+print(sign(7));
+
+# Loop in function
+fn sumTo(n) {
+  let s = 0;
+  let i = 1;
+  while (i <= n) { s = s + i; i++; }
+  return s;
+}
+print(sumTo(5));
+
+# Recursive factorial
+fn fact(n) {
+  if (n <= 1) { return 1; }
+  return n * fact(n - 1);
+}
+print(fact(6));
+
+# Early return
+fn firstEven(n) {
+  let i = 0;
+  while (i <= n) {
+    if (i % 2 == 0) { return i; }
+    i++;
+  }
+  return -1;
+}
+print(firstEven(7));
+
+# No return => null
+fn log(x) { print(x); }
+let r = log("test");
+print(r);
+
+# Scope isolation
+let g = 10;
+fn readG() { return g; }
+fn shadow() { let g = 99; return g; }
+print(readG());
+print(shadow());
+print(g);
+
+# Return in for loop
+fn firstMul3() {
+  for (let i = 1; i < 20; i++) {
+    if (i % 3 == 0) { return i; }
+  }
+  return -1;
+}
+print(firstMul3());

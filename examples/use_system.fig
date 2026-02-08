@@ -1,0 +1,16 @@
+use "system"
+
+let t1 = system.now()
+print(t1)
+
+let c = system.clock()
+print(c)
+
+print(system.version())
+print(system.platform())
+
+let home = system.env("HOME")
+print(home)
+
+let missing = system.env("FIGTEST_NONEXISTENT_XYZ")
+print(missing)

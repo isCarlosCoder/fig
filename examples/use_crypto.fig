@@ -1,0 +1,13 @@
+use "crypto"
+
+print(crypto.hash("hello"))
+print(crypto.sha1("hello"))
+print(crypto.sha256("hello"))
+
+let b = crypto.base64Encode("FigLang")
+print(b)
+print(crypto.base64Decode(b))
+
+let h = crypto.hexEncode("Fig")
+print(h)
+print(crypto.hexDecode(h))

@@ -1,0 +1,58 @@
+struct Point {
+    x
+    y
+
+    fn init(x, y) {
+        this.x = x
+        this.y = y
+    }
+
+    fn move(dx, dy) {
+        this.x = this.x + dx
+        this.y = this.y + dy
+    }
+}
+
+let p = Point(10, 20)
+print(p.x)
+print(p.y)
+
+p.move(5, 10)
+print(p.x)
+print(p.y)
+
+print("---")
+
+struct User {
+    name = "anon"
+    age = 0
+}
+
+let u = User()
+print(u.name)
+print(u.age)
+
+u.name = "Carlos"
+u.age = 30
+print(u.name)
+print(u.age)
+
+print("---")
+
+struct Counter {
+    count = 0
+
+    fn increment() {
+        this.count = this.count + 1
+    }
+
+    fn get() {
+        return this.count
+    }
+}
+
+let c = Counter()
+c.increment()
+c.increment()
+c.increment()
+print(c.get())

@@ -1,0 +1,13 @@
+# Increment and decrement examples
+let a = 0;
+print(a++);  # prints 0, then a becomes 1
+print(a);    # prints 1
+
+let b = 5;
+print(++b);  # prints 6
+print(b);    # prints 6
+
+# in for loop
+for (let i = 0; i <= 4; i++) {
+    print(i);
+}

@@ -1,0 +1,21 @@
+use "json"
+
+let obj = { nome: "Fig", versao: 1, ativo: true }
+let s = json.stringify(obj)
+print(s)
+
+let parsed = json.parse(s)
+print(parsed.nome)
+print(parsed.versao)
+
+let pretty = json.serialize([1, 2, 3])
+print(pretty)
+
+let arr = json.parse("[10, 20, 30]")
+print(arr)
+
+let n = json.parse("null")
+print(n)
+
+let round = json.deserialize(json.stringify({ x: 42 }))
+print(round.x)

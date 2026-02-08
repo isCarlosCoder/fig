@@ -1,0 +1,3 @@
+# circular_a.fig — imports circular_b to test circular import prevention
+import "circular_b"
+let fromA = "A";

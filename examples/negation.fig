@@ -1,0 +1,17 @@
+# Exemplos de negação (!)
+
+# Negação simples
+print(!true); # false
+
+# Dupla negação
+print(!!false); # false
+
+# Em números (truthiness): !0 -> false (neste design, números são truthy)
+let x = 0;
+print(!x); # false
+
+# Em condição
+if (!false) { print("negacao funciona"); }
+
+# Caso de erro (descomente para testar runtime error)
+# print(!notdefined); # erro: variável não definida

@@ -1,0 +1,31 @@
+# Exemplos de Condicionais
+
+# Simples if
+if (true) { print("if is true"); }
+
+# if / else
+if (false) { print("should not"); } else { print("else executed"); }
+
+# if / elif / else
+if (false) { print("one"); } elif (false) { print("two"); } elif (true) { print("three"); } else { print("four"); }
+
+# Aninhamento
+let x = 10;
+if (x > 5) {
+    if (x < 20) { print("nested: " + x); } else { print("nested else"); }
+}
+
+# Escopo de bloco e shadowing
+let a = 1;
+if (true) {
+    let a = 2;
+    print(a); # prints 2
+}
+print(a); # prints 1
+
+# Exemplo que gera erro de runtime se descomentado
+if (true) {
+    let y = 7;
+    print(y); # prints 7
+}
+# print(y); # Descomente para ver erro: variável 'y' não definida

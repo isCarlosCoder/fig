@@ -1,0 +1,32 @@
+use "objects"
+
+let obj = { nome: "Carlos", idade: 30, lang: "Fig" }
+
+print(objects.keys(obj))
+print(objects.values(obj))
+print(objects.entries(obj))
+
+print(objects.hasKey(obj, "nome"))
+print(objects.hasKey(obj, "email"))
+
+print(objects.size(obj))
+
+let deleted = objects.deleteKey(obj, "lang")
+print(deleted)
+print(obj)
+
+let a = { x: 1, y: 2 }
+let b = { y: 99, z: 3 }
+let merged = objects.merge(a, b)
+print(merged)
+
+let original = { a: 1, b: 2 }
+let copia = objects.clone(original)
+copia.a = 999
+print(original)
+print(copia)
+
+let temp = { a: 1, b: 2 }
+objects.clear(temp)
+print(temp)
+print(objects.size(temp))

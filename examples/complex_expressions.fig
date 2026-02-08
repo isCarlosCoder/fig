@@ -1,0 +1,15 @@
+# Complex expressions with precedence and parenthesis
+let x = (2 + 3) * (4 - 1) / (1 + 1);   # (5 * 3) / 2 = 7.5
+let y = x + 2 * (3 + 4) - 5 % 2;       # x + 2*(7) - 1 = 20.5
+print(x);
+print(y);
+
+# Strings and concatenation
+let hello = "hello";
+let world = " world";
+let s = hello + world;
+print(s);
+
+# Concatenate string and number (uses Value.String())
+let mixed = "value: " + x;
+print(mixed);

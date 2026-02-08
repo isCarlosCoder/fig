@@ -1,0 +1,46 @@
+# ============================================
+# Testando use "math"
+# ============================================
+
+use "math"
+
+# Funções básicas
+print(math.abs(-42));
+print(math.pow(2, 8));
+print(math.sqrt(81));
+print(math.cbrt(64));
+
+# Arredondamento
+print(math.floor(3.9));
+print(math.ceil(3.1));
+print(math.round(3.5));
+
+# Min / Max / Clamp
+print(math.min(10, 3));
+print(math.max(10, 3));
+print(math.clamp(100, 0, 50));
+
+# Trigonometria
+print(math.sin(0));
+print(math.cos(0));
+
+# Log e Exp
+print(math.log(1));
+print(math.log10(1000));
+print(math.exp(0));
+
+# Constantes
+print(math.PI);
+print(math.E);
+
+# Uso em expressões
+let raio = 5;
+let area = math.PI * math.pow(raio, 2);
+print(math.round(area));
+
+# Rand
+let r = math.rand();
+print(r >= 0 && r < 1);
+
+let ri = math.randInt(1, 100);
+print(ri >= 1 && ri < 100);

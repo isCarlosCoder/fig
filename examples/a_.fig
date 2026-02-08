@@ -1,0 +1,5 @@
+use "io"
+
+let name = io.input("Seu nome:")
+
+print(name)

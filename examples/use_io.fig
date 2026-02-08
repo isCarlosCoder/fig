@@ -1,0 +1,16 @@
+use "io"
+
+io.writeFile("/tmp/fig_test_io.txt", "hello fig")
+let content = io.readFile("/tmp/fig_test_io.txt")
+print(content)
+
+io.appendFile("/tmp/fig_test_io.txt", " world")
+let content2 = io.readFile("/tmp/fig_test_io.txt")
+print(content2)
+
+let e = io.exists("/tmp/fig_test_io.txt")
+print(e)
+
+io.deleteFile("/tmp/fig_test_io.txt")
+let e2 = io.exists("/tmp/fig_test_io.txt")
+print(e2)

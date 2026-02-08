@@ -1,0 +1,5 @@
+# Print
+
+```js
+print(<expr>)
+```

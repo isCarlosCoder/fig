@@ -1,0 +1,40 @@
+let nums = [10, 20, 30, 40, 50]
+
+print("--- for x in range(0, 5) ---")
+for i in range(0, 5) {
+  print(i)
+}
+
+print("--- for x in range(0, 10, 2) ---")
+for i in range(0, 10, 2) {
+  print(i)
+}
+
+print("--- for x in range(5, 0) (auto step -1) ---")
+for i in range(5, 0) {
+  print(i)
+}
+
+print("--- for i, v in enumerate(nums) ---")
+for i, v in enumerate(nums) {
+  print(i)
+  print(v)
+}
+
+print("--- for x in array ---")
+let frutas = ["maca", "banana", "uva"]
+for f in frutas {
+  print(f)
+}
+
+print("--- break in for-in ---")
+for x in range(0, 100) {
+  if (x == 3) { break }
+  print(x)
+}
+
+print("--- continue in for-in ---")
+for x in range(0, 5) {
+  if (x == 2) { continue }
+  print(x)
+}

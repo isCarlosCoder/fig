@@ -1,0 +1,6 @@
+# Teste da parte problemática: for com continue e break
+for (let n = 0; n < 6; n = n + 1) {
+    if (n % 2 == 0) { continue; }
+    if (n == 5) { break; }
+    print(n);
+}

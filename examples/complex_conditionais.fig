@@ -1,0 +1,53 @@
+if (10 < 50) {
+    print("OK")
+} else {
+    print("Not ok")
+}
+
+# Versão 1: cadeia de else-if
+let n = 47
+if (n <= 0) {
+    print("não positivo")
+} elif (n <= 10) {
+    print("1..10")
+} elif (n <= 100) {
+    print("11..100")
+} else {
+    print(">100")
+}
+
+
+# Versão 3: aninhamento profundo
+let score = 73
+if (score >= 90) {
+    print("Excelente")
+} else {
+    if (score >= 75) {
+        print("Muito bom")
+    } else {
+        if (score >= 60) {
+            print("Suficiente")
+        } else {
+            print("Insuficiente")
+        }
+    }
+}
+
+# Versão 4: condições aritméticas combinadas
+let x = 30
+let y = 6
+if (y != 0 && (x % y == 0 || x / y >= 5)) {
+    print("Condição aritmética satisfeita")
+} else {
+    print("Condição aritmética falhou")
+}
+
+# Versão 5: booleanos compostos
+let a = true
+let b = false
+let c = true
+if ((a && b) || (b && c)) {
+    print("booleano complexo: verdadeiro")
+} else {
+    print("booleano complexo: falso")
+}

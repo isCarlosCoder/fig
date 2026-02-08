@@ -1,0 +1,55 @@
+use "arrays"
+
+let a = [1, 2, 3]
+arrays.push(a, 4)
+print(a)
+
+let last = arrays.pop(a)
+print(last)
+print(a)
+
+let first = arrays.shift(a)
+print(first)
+print(a)
+
+arrays.unshift(a, 0)
+print(a)
+
+let b = [10, 20, 30]
+arrays.insert(b, 1, 15)
+print(b)
+
+let removed = arrays.remove(b, 2)
+print(removed)
+print(b)
+
+let c = [1, 2, 3, 4, 5]
+let s = arrays.slice(c, 1, 4)
+print(s)
+
+let d = arrays.concat([1, 2], [3, 4])
+print(d)
+
+let e = [3, 1, 2]
+arrays.reverse(e)
+print(e)
+
+let f = [3, 1, 4, 1, 5]
+arrays.sort(f)
+print(f)
+
+let g = ["a", "b", "c"]
+print(arrays.index(g, "b"))
+print(arrays.index(g, "z"))
+print(arrays.contains(g, "c"))
+print(arrays.contains(g, "z"))
+
+let h = [1, 2, 2, 3, 3, 3]
+print(arrays.unique(h))
+
+print(arrays.len(g))
+
+let i = [1, 2, 3, 4, 5]
+arrays.shuffle(i)
+print("shuffle ok")
+print(arrays.len(i))

@@ -1,0 +1,37 @@
+use "http"
+use "json"
+
+http.route("GET", "/", fn(req, res) {
+    res.send("<h1>Welcome to Fig!</h1><p>Try /api/users or /greet?name=Ana</p>")
+})
+
+http.route("GET", "/api/users", fn(req, res) {
+    let users = [
+        {"name": "Carlos", "age": 30},
+        {"name": "Ana", "age": 25}
+    ]
+    res.json(users)
+})
+
+http.route("POST", "/api/echo", fn(req, res) {
+    let data = json.parse(req.body)
+    res.json({"received": data, "method": req.method})
+})
+
+http.route("GET", "/greet", fn(req, res) {
+    let name = req.query["name"]
+    if (name == null) {
+        res.status(400)
+        res.send("missing ?name= parameter")
+    } else {
+        res.send("<h1>Hello, " + name + "!</h1>")
+    }
+})
+
+http.route("GET", "/status", fn(req, res) {
+    res.status(201)
+    res.json({"status": "created"})
+})
+
+print("Starting Fig server on port 3000...")
+http.listen(3000)

@@ -1,0 +1,15 @@
+# Logical operators and short-circuit behavior
+let t = true && false;
+let u = true || false;
+let v = !false;
+print(t);   # false
+print(u);   # true
+print(v);   # true
+
+# Short-circuit: RHS should NOT be evaluated when not necessary
+# The following lines are illustrative; 'not_defined' would be an error
+# but because of short-circuit evaluation they should be safe if used similarly in code
+let sc1 = true || not_defined;   # RHS not evaluated due to OR short-circuit
+let sc2 = false && not_defined;  # RHS not evaluated due to AND short-circuit
+print(sc1);
+print(sc2);

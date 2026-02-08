@@ -1,0 +1,17 @@
+# Examples of error cases (left commented so they don't abort automatic runs)
+# Parse error example:
+#let 1a = 2;   # invalid identifier
+
+# Runtime errors:
+# Uncomment to test runtime failures
+# let z = 1 / 0;        # division by zero
+# let m = 10 % 0;       # modulo by zero
+
+# Undefined variable (runtime error)
+# print(not_defined);
+
+# Redeclare in same scope will cause a Define error
+# let x = 1;
+# let x = 2; # error: variable 'x' already defined in this scope
+
+# Keep these examples commented if you want to run examples without stopping on errors.

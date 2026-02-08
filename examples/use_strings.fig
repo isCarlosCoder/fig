@@ -1,0 +1,43 @@
+# ============================================
+# Testando use "strings"
+# ============================================
+
+use "strings"
+
+# len
+print(strings.len("FigLang"));
+
+# upper / lower
+print(strings.upper("hello"));
+print(strings.lower("WORLD"));
+
+# trim
+print(strings.trim("  fig  "));
+
+# split / join
+let parts = strings.split("a,b,c", ",");
+print(parts);
+print(strings.join(parts, " - "));
+
+# replace
+print(strings.replace("hello world", "world", "Fig"));
+
+# contains / startsWith / endsWith
+print(strings.contains("FigLang", "Lang"));
+print(strings.startsWith("FigLang", "Fig"));
+print(strings.endsWith("FigLang", "Lang"));
+
+# indexOf / lastIndexOf
+print(strings.indexOf("abcabc", "bc"));
+print(strings.lastIndexOf("abcabc", "bc"));
+
+# substring
+print(strings.substring("FigLang", 0, 3));
+print(strings.substring("FigLang", 3, 7));
+
+# charAt
+print(strings.charAt("Fig", 0));
+print(strings.charAt("Fig", 2));
+
+# repeat
+print(strings.repeat("ha", 3));

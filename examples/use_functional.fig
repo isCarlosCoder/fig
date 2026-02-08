@@ -1,0 +1,21 @@
+use "functional"
+use "math"
+
+let r = functional.call(math.abs, -42)
+print(r)
+
+let args = [-9]
+let r2 = functional.apply(math.abs, args)
+print(r2)
+
+let pow2 = functional.partial(math.pow, 2)
+print(pow2(10))
+
+let once_abs = functional.once(math.abs)
+print(once_abs(-5))
+print(once_abs(-999))
+
+let memo_sqrt = functional.memo(math.sqrt)
+print(memo_sqrt(16))
+print(memo_sqrt(16))
+print(memo_sqrt(25))

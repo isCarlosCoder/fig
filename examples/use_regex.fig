@@ -1,0 +1,13 @@
+use "regex"
+
+print(regex.match("hello123", "[0-9]+"))
+print(regex.match("hello", "[0-9]+"))
+
+let nums = regex.findAll("abc123def456", "[0-9]+")
+print(nums)
+
+let result = regex.replaceRegex("foo123bar456", "[0-9]+", "#")
+print(result)
+
+let parts = regex.splitRegex("one:two::three", ":+")
+print(parts)

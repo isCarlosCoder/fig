@@ -1,0 +1,6 @@
+# transitive: uses math_utils
+import "math_utils"
+
+fn dobro(x) {
+  return mult(x, 2);
+}

@@ -1,0 +1,7 @@
+# Debug do for: print no inicio da iteração
+for (let n = 0; n < 6; n = n + 1) {
+    print("iter: " + n);
+    if (n % 2 == 0) { continue; }
+    if (n == 5) { break; }
+    print("odd: " + n);
+}

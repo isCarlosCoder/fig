@@ -1,0 +1,108 @@
+# ============================================
+# Arrays e Objetos em Fig
+# ============================================
+
+# --- Arrays ---
+let frutas = ["maçã", "banana", "uva"];
+print(frutas);
+print(frutas[0]);
+print(frutas[2]);
+
+# Atribuição por índice
+frutas[1] = "manga";
+print(frutas);
+
+# Array vazio + crescimento dinâmico
+let nums = [];
+nums[0] = 10;
+nums[1] = 20;
+nums[2] = 30;
+print(nums);
+
+# Arrays aninhados
+let matrix = [[1, 2], [3, 4]];
+print(matrix[0][1]);
+print(matrix[1][0]);
+
+# --- Objetos ---
+let pessoa = {nome: "Carlos", idade: 30, ativo: true};
+print(pessoa);
+print(pessoa.nome);
+print(pessoa.idade);
+
+# Acesso por colchete
+print(pessoa["ativo"]);
+
+# Atribuição em propriedade existente
+pessoa.idade = 31;
+print(pessoa.idade);
+
+# Adição de nova propriedade
+pessoa.email = "carlos@fig.dev";
+print(pessoa.email);
+
+# Chave inexistente retorna null
+print(pessoa.telefone);
+
+# Objetos aninhados
+let config = {
+  db: {host: "localhost", port: 5432},
+  debug: false
+};
+print(config.db.host);
+print(config.db.port);
+
+# --- Composição: arrays + objetos ---
+let usuarios = [
+  {nome: "Ana", pontos: 100},
+  {nome: "Beto", pontos: 200}
+];
+print(usuarios[0].nome);
+print(usuarios[1].pontos);
+
+let inventario = {
+  itens: ["espada", "escudo", "poção"],
+  quantidade: 3
+};
+print(inventario.itens[2]);
+
+# --- Loop com array ---
+let total = 0;
+for (let i = 0; i < 3; i++) {
+  total = total + nums[i];
+}
+print(total);
+
+# --- Funções que retornam arrays e objetos ---
+fn range(n) {
+  let r = [];
+  let i = 0;
+  while (i < n) {
+    r[i] = i;
+    i++;
+  }
+  return r;
+}
+print(range(5));
+
+fn criarPessoa(nome, idade) {
+  let p = {};
+  p.nome = nome;
+  p.idade = idade;
+  return p;
+}
+let dev = criarPessoa("Fig", 1);
+print(dev.nome);
+print(dev.idade);
+
+# --- Igualdade ---
+print([1, 2, 3] == [1, 2, 3]);
+print([1, 2] == [1, 3]);
+print({a: 1} == {a: 1});
+print({a: 1} == {a: 2});
+
+# --- Truthiness ---
+if ([1]) { print("array não-vazio é truthy"); }
+if (![] ) { print("array vazio é falsy"); }
+if ({x: 1}) { print("objeto não-vazio é truthy"); }
+if (!{}) { print("objeto vazio é falsy"); }

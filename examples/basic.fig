@@ -1,0 +1,13 @@
+# Basic arithmetic and modulo
+let a = 10;
+let b = 5;
+print(a + b);   # 15
+print(a - b);   # 5
+print(a * b);   # 50
+print(a / b);   # 2
+print(a % b);   # 0
+
+# Assignment
+let c = 3;
+c = c + 7;
+print(c);       # 10

@@ -1,0 +1,18 @@
+use "runtime"
+
+let mem = runtime.memUsage()
+print(mem.alloc > 0)
+print(mem.totalAlloc > 0)
+print(mem.sys > 0)
+print(mem.numGC >= 0)
+
+runtime.gc()
+
+let v = runtime.version()
+print(v)
+
+let p = runtime.platform()
+print(p)
+
+let cpus = runtime.numCPU()
+print(cpus > 0)

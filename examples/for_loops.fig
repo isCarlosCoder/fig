@@ -1,0 +1,23 @@
+# Exemplos de laços for
+
+# for básico
+for (let i = 0; i < 3; i++) {
+    print(i);
+}
+
+# for com expressão de controle no init
+let sum = 0;
+for (let i = 0; i < 5; i = i + 1) {
+    sum = sum + i;
+}
+print(sum);
+
+# for sem condição (loop infinito, cuidado)
+# for (let x = 0; ; x = x + 1) { if (x == 3) { break; } print(x); }
+
+# for com continue e break
+for (let n = 0; n < 6; n = n + 1) {
+    if (n % 2 == 0) { continue; }
+    if (n == 5) { break; }
+    print(n);
+}

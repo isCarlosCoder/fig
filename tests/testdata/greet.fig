@@ -1,0 +1,4 @@
+# greetings module
+fn saudar(nome) {
+  return "Olá, " + nome + "!";
+}

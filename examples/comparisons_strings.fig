@@ -1,0 +1,12 @@
+# Comparisons, equality and boolean printing
+let a = 10;
+let b = 20;
+print(a == b);   # false
+print(a != b);   # true
+print(a < b);    # true
+print(a >= a);   # true
+
+# Strings in comparisons
+let s1 = "abc";
+let s2 = "abc";
+print(s1 == s2); # true
