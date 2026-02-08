@@ -152,6 +152,124 @@ let v = try task.await(t) onerror(e) {
 print(v)  # 0
 ```
 
+## Uso com structs
+
+### Métodos assíncronos
+
+Métodos de structs podem retornar task handles. O padrão é copiar `this.campo` para uma variável local antes do `spawn` (closures não capturam `this`):
+
+```js
+use "task"
+use "system"
+
+struct Downloader {
+    url
+
+    fn init(url) {
+        this.url = url
+    }
+
+    fn fetchAsync() {
+        let u = this.url
+        return task.spawn(fn() {
+            system.sleep(100)
+            return "dados de " + u
+        })
+    }
+}
+
+let d1 = Downloader("fig.dev/api")
+let d2 = Downloader("fig.dev/docs")
+
+let t1 = d1.fetchAsync()
+let t2 = d2.fetchAsync()
+
+print(task.await(t1))  # dados de fig.dev/api
+print(task.await(t2))  # dados de fig.dev/docs
+```
+
+### Worker pool com structs
+
+```js
+use "task"
+use "system"
+
+struct Worker {
+    name
+
+    fn init(name) {
+        this.name = name
+    }
+
+    fn runAsync(value) {
+        let n = this.name
+        let v = value
+        return task.spawn(fn() {
+            system.sleep(50)
+            return n + " processou " + v
+        })
+    }
+}
+
+fn spawnWork(w, val) {
+    return w.runAsync(val)
+}
+
+let w1 = Worker("alpha")
+let w2 = Worker("beta")
+
+let j1 = spawnWork(w1, "A")
+let j2 = spawnWork(w2, "B")
+let j3 = spawnWork(w1, "C")
+
+print(task.await(j1))  # alpha processou A
+print(task.await(j2))  # beta processou B
+print(task.await(j3))  # alpha processou C
+```
+
+### Timeout e race com structs
+
+```js
+use "task"
+use "system"
+
+struct SlowService {
+    delay
+
+    fn init(delay) {
+        this.delay = delay
+    }
+
+    fn callAsync() {
+        let d = this.delay
+        return task.spawn(fn() {
+            system.sleep(d)
+            return "pronto"
+        })
+    }
+}
+
+# timeout
+let fast = SlowService(50)
+let slow = SlowService(2000)
+
+let r1 = try task.awaitTimeout(fast.callAsync(), 500) onerror {
+    return "timeout"
+}
+print(r1)  # pronto
+
+let r2 = try task.awaitTimeout(slow.callAsync(), 100) onerror {
+    return "timeout"
+}
+print(r2)  # timeout
+
+# race entre métodos
+let s1 = SlowService(300)
+let s2 = SlowService(50)
+let winner = task.race([s1.callAsync(), s2.callAsync()])
+print(winner)  # pronto (s2 termina primeiro)
+```
+
 ## Resumo da API
 
 | Função | Descrição |
