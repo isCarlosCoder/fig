@@ -1,5 +1,0 @@
-# Print
-
-```js
-print(<expr>)
-```
