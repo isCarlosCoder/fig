@@ -9,7 +9,7 @@
 Clone o repositório e compile o executável:
 
 ```bash
-git clone https://github.com/iscarloscoder/fig.git
+git clone https://github.com/isCarlosCoder/fig.git
 cd fig
 go build -o fig .
 ```
