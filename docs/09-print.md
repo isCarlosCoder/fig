@@ -17,11 +17,36 @@ print({nome: "Fig"})
 
 ```
 print(expressão)
+print(expressão1, expressão2, ...)
 ```
 
 - Aceita **qualquer tipo** de valor
+- Aceita **múltiplos argumentos** separados por vírgula — são impressos na mesma linha, separados por espaço
 - Sempre imprime **uma linha** (automaticamente adiciona quebra de linha)
 - Retorna `null`
+
+## Múltiplos argumentos
+
+Quando você passa vários valores separados por vírgula, eles são impressos na mesma linha com espaço entre eles:
+
+```js
+print(1, 2, 3, 4, 5)         # 1 2 3 4 5
+print("nome:", "Fig")         # nome: Fig
+print("x =", 10, "y =", 20)  # x = 10 y = 20
+```
+
+Isso é mais prático do que concatenar com `+`:
+
+```js
+let nome = "Carlos"
+let idade = 30
+
+# Com múltiplos argumentos (mais simples)
+print("Nome:", nome, "Idade:", idade)  # Nome: Carlos Idade: 30
+
+# Com concatenação (mais verboso)
+print("Nome: " + nome + " Idade: " + idade)  # Nome: Carlos Idade: 30
+```
 
 ## Representação dos tipos
 
