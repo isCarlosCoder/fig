@@ -88,6 +88,7 @@ fig --help              # ajuda
 | [functional](docs/modules/functional.md) | Programação funcional | 5 funções |
 | [debug](docs/modules/debug.md) | Depuração e diagnóstico | 5 funções |
 | [runtime](docs/modules/runtime.md) | Informações do runtime | 5 funções |
+| [task](docs/modules/task.md) | Concorrência com goroutines | 4 funções |
 
 ## Exemplos rápidos
 

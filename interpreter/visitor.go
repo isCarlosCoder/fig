@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/iscarloscoder/fig/builtins"
@@ -53,6 +54,18 @@ type FigVisitor struct {
 
 	// importedFiles tracks already-imported absolute paths to prevent circular imports
 	importedFiles map[string]bool
+}
+
+// syncWriter wraps an io.Writer with a mutex for goroutine-safe writes.
+type syncWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (sw *syncWriter) Write(p []byte) (n int, err error) {
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
+	return sw.w.Write(p)
 }
 
 func NewFigVisitor(globalEnv *environment.Env, out io.Writer) *FigVisitor {
@@ -225,6 +238,31 @@ func (v *FigVisitor) VisitUseStmt(ctx *parser.UseStmtContext) interface{} {
 				return val, nil
 			}
 			return environment.NewNil(), nil
+		}
+	}
+
+	// If loading the task module, set TaskSpawner so task.spawn can execute
+	// user-defined Fig functions in separate goroutines.
+	if modName == "task" {
+		// Wrap v.out in a syncWriter so goroutine prints are safe.
+		sw := &syncWriter{w: v.out}
+		v.out = sw
+		builtins.TaskSpawner = func(fn environment.Value, resultCh chan<- builtins.TaskResult) {
+			go func() {
+				newV := NewFigVisitor(environment.NewEnv(nil), sw)
+				result := newV.callFunction(0, 0, fn, nil)
+				if newV.RuntimeErr != nil {
+					if re, ok := newV.RuntimeErr.(*RuntimeError); ok {
+						resultCh <- builtins.TaskResult{Err: fmt.Errorf("%s", re.Message)}
+					} else {
+						resultCh <- builtins.TaskResult{Err: newV.RuntimeErr}
+					}
+				} else if val, ok := result.(environment.Value); ok {
+					resultCh <- builtins.TaskResult{Value: val}
+				} else {
+					resultCh <- builtins.TaskResult{Value: environment.NewNil()}
+				}
+			}()
 		}
 	}
 
