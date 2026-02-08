@@ -44,6 +44,10 @@ type FigVisitor struct {
 	// loopDepth indicates how many nested loops we're currently in (to validate break/continue)
 	loopDepth int
 
+	// pendingLoopSignal holds a break/continue signal from a try/onerror block
+	// that needs to propagate to the enclosing loop.
+	pendingLoopSignal interface{}
+
 	// baseDir is the directory of the currently executing .fig file (for resolving imports)
 	baseDir string
 
@@ -349,6 +353,11 @@ func (v *FigVisitor) VisitExprStmt(ctx *parser.ExprStmtContext) interface{} {
 	if v.RuntimeErr != nil {
 		return nil
 	}
+	if v.pendingLoopSignal != nil {
+		sig := v.pendingLoopSignal
+		v.pendingLoopSignal = nil
+		return sig
+	}
 	return nil
 }
 
@@ -361,6 +370,11 @@ func (v *FigVisitor) VisitVarDeclaration(ctx *parser.VarDeclarationContext) inte
 		val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
 		if v.RuntimeErr != nil {
 			return nil
+		}
+		if v.pendingLoopSignal != nil {
+			sig := v.pendingLoopSignal
+			v.pendingLoopSignal = nil
+			return sig
 		}
 		if err := v.env.Define(name, val); err != nil {
 			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
@@ -384,6 +398,11 @@ func (v *FigVisitor) VisitVarAtribuition(ctx *parser.VarAtribuitionContext) inte
 	if v.RuntimeErr != nil {
 		return nil
 	}
+	if v.pendingLoopSignal != nil {
+		sig := v.pendingLoopSignal
+		v.pendingLoopSignal = nil
+		return sig
+	}
 	if err := v.env.Assign(name, val); err != nil {
 		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
 		return nil
@@ -398,6 +417,11 @@ func (v *FigVisitor) VisitPrintStmt(ctx *parser.PrintStmtContext) interface{} {
 	val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
 	if v.RuntimeErr != nil {
 		return nil
+	}
+	if v.pendingLoopSignal != nil {
+		sig := v.pendingLoopSignal
+		v.pendingLoopSignal = nil
+		return sig
 	}
 	fmt.Fprintln(v.out, val.String())
 	return nil
@@ -852,6 +876,10 @@ func (v *FigVisitor) VisitPrimary(ctx *parser.PrimaryContext) interface{} {
 	if ctx.ObjectLiteral() != nil {
 		return v.VisitObjectLiteral(ctx.ObjectLiteral().(*parser.ObjectLiteralContext))
 	}
+	// ── try expression: try expr onerror(e) { block } ──
+	if ctx.TryExpr() != nil {
+		return v.VisitTryExpr(ctx.TryExpr().(*parser.TryExprContext))
+	}
 	// ── anonymous function expression: fn(params) block ──
 	if ctx.TK_FN() != nil {
 		var params []string
@@ -930,6 +958,57 @@ func (v *FigVisitor) VisitPrimary(ctx *parser.PrimaryContext) interface{} {
 	if ctx.LPAREN() != nil {
 		return v.VisitExpr(ctx.Expr().(*parser.ExprContext))
 	}
+	return environment.NewNil()
+}
+
+// VisitTryExpr handles: try expr onerror(e) { block }
+// Evaluates expr; if a RuntimeError occurs, clears it, binds the error message
+// to the optional variable, and executes the onerror block.
+// A 'return' inside onerror provides the fallback value for the expression.
+// A 'break'/'continue' inside onerror sets pendingLoopSignal for the enclosing loop.
+func (v *FigVisitor) VisitTryExpr(ctx *parser.TryExprContext) interface{} {
+	// Evaluate the guarded expression
+	val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+
+	if v.RuntimeErr == nil {
+		// No error — return the value as-is
+		return val
+	}
+
+	// Extract human-readable message from the error
+	var errMsg string
+	if re, ok := v.RuntimeErr.(*RuntimeError); ok {
+		errMsg = re.Message
+	} else {
+		errMsg = v.RuntimeErr.Error()
+	}
+
+	// Clear the error so execution can continue
+	v.RuntimeErr = nil
+
+	// Execute onerror block in a new scope
+	v.pushEnv()
+	defer v.popEnv()
+
+	// Bind error variable if specified: onerror(e) { ... }
+	if ctx.ID() != nil {
+		v.env.Define(ctx.ID().GetText(), environment.NewString(errMsg))
+	}
+
+	result := v.visitBlockRaw(ctx.Block().(*parser.BlockContext))
+
+	// If block returned via 'return', use its value as the fallback
+	if ret, ok := result.(returnSignal); ok {
+		return ret.value
+	}
+
+	// If block produced break/continue, store for the enclosing loop
+	if sig, ok := result.(loopSignal); ok {
+		v.pendingLoopSignal = sig
+		return environment.NewNil()
+	}
+
+	// Block fell through without return — result is null
 	return environment.NewNil()
 }
 

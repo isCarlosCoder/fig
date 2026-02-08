@@ -121,6 +121,9 @@ type FigParserListener interface {
 	// EnterPrimary is called when entering the primary production.
 	EnterPrimary(c *PrimaryContext)
 
+	// EnterTryExpr is called when entering the tryExpr production.
+	EnterTryExpr(c *TryExprContext)
+
 	// EnterArrayLiteral is called when entering the arrayLiteral production.
 	EnterArrayLiteral(c *ArrayLiteralContext)
 
@@ -243,6 +246,9 @@ type FigParserListener interface {
 
 	// ExitPrimary is called when exiting the primary production.
 	ExitPrimary(c *PrimaryContext)
+
+	// ExitTryExpr is called when exiting the tryExpr production.
+	ExitTryExpr(c *TryExprContext)
 
 	// ExitArrayLiteral is called when exiting the arrayLiteral production.
 	ExitArrayLiteral(c *ArrayLiteralContext)

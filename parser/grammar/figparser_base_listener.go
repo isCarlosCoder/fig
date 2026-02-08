@@ -248,6 +248,12 @@ func (s *BaseFigParserListener) EnterPrimary(ctx *PrimaryContext) {}
 // ExitPrimary is called when production primary is exited.
 func (s *BaseFigParserListener) ExitPrimary(ctx *PrimaryContext) {}
 
+// EnterTryExpr is called when production tryExpr is entered.
+func (s *BaseFigParserListener) EnterTryExpr(ctx *TryExprContext) {}
+
+// ExitTryExpr is called when production tryExpr is exited.
+func (s *BaseFigParserListener) ExitTryExpr(ctx *TryExprContext) {}
+
 // EnterArrayLiteral is called when production arrayLiteral is entered.
 func (s *BaseFigParserListener) EnterArrayLiteral(ctx *ArrayLiteralContext) {}
 

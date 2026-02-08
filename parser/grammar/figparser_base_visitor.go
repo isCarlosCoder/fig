@@ -159,6 +159,10 @@ func (v *BaseFigParserVisitor) VisitPrimary(ctx *PrimaryContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseFigParserVisitor) VisitTryExpr(ctx *TryExprContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseFigParserVisitor) VisitArrayLiteral(ctx *ArrayLiteralContext) interface{} {
 	return v.VisitChildren(ctx)
 }

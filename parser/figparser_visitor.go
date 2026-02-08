@@ -121,6 +121,9 @@ type FigParserVisitor interface {
 	// Visit a parse tree produced by FigParser#primary.
 	VisitPrimary(ctx *PrimaryContext) interface{}
 
+	// Visit a parse tree produced by FigParser#tryExpr.
+	VisitTryExpr(ctx *TryExprContext) interface{}
+
 	// Visit a parse tree produced by FigParser#arrayLiteral.
 	VisitArrayLiteral(ctx *ArrayLiteralContext) interface{}
 

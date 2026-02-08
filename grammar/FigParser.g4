@@ -143,10 +143,15 @@ primary
     | TK_THIS
     | arrayLiteral
     | objectLiteral
+    | tryExpr
     | TK_FN LPAREN fnParams? RPAREN block
     | ID LPAREN fnArgs? RPAREN
     | ID ( PLUSPLUS | MINUSMINUS )?
     | LPAREN expr RPAREN
+    ;
+
+tryExpr
+    : TK_TRY expr TK_ONERROR (LPAREN ID? RPAREN)? block
     ;
 
 arrayLiteral
