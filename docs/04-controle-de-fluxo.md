@@ -1,0 +1,237 @@
+# Controle de Fluxo
+
+## if / elif / else
+
+A estrutura condicional básica:
+
+```js
+let idade = 18
+
+if (idade >= 18) {
+    print("Maior de idade")
+} elif (idade >= 12) {
+    print("Adolescente")
+} else {
+    print("Criança")
+}
+```
+
+### Regras
+
+- A **condição** deve estar entre parênteses `()`
+- O **corpo** deve estar entre chaves `{ }`
+- `elif` e `else` são **opcionais**
+- Pode ter quantos `elif` quiser
+
+### Condições aninhadas
+
+```js
+let x = 10
+
+if (x > 0) {
+    if (x > 5) {
+        print("Maior que 5")
+    } else {
+        print("Entre 1 e 5")
+    }
+}
+```
+
+### Escopo dentro de blocos
+
+Variáveis declaradas dentro de um bloco `if` não existem fora dele:
+
+```js
+if (true) {
+    let dentro = "só aqui"
+    print(dentro)  # funciona
+}
+# print(dentro)  # erro: variável não encontrada
+```
+
+---
+
+## while
+
+Repete enquanto a condição for verdadeira:
+
+```js
+let i = 0
+while (i < 5) {
+    print(i)
+    i++
+}
+# Saída: 0, 1, 2, 3, 4
+```
+
+---
+
+## do-while
+
+Executa o bloco **pelo menos uma vez**, depois verifica a condição:
+
+```js
+let i = 0
+do {
+    print(i)
+    i++
+} while (i < 3)
+# Saída: 0, 1, 2
+```
+
+Mesmo se a condição for falsa desde o início, o bloco executa uma vez:
+
+```js
+let x = 100
+do {
+    print("Executou!")  # imprime uma vez
+} while (x < 0)
+```
+
+---
+
+## for (loop clássico)
+
+O loop `for` tem três partes separadas por `;`:
+
+```
+for (inicialização; condição; passo) { corpo }
+```
+
+```js
+for (let i = 0; i < 5; i++) {
+    print(i)
+}
+# Saída: 0, 1, 2, 3, 4
+```
+
+Todas as partes são opcionais:
+
+```js
+let i = 0
+for (; i < 3;) {
+    print(i)
+    i++
+}
+```
+
+---
+
+## for-in
+
+Itera sobre os elementos de um **array**:
+
+```js
+let frutas = ["maçã", "banana", "uva"]
+for fruta in frutas {
+    print(fruta)
+}
+# Saída: maçã, banana, uva
+```
+
+Funciona com qualquer expressão que retorne um array:
+
+```js
+for item in [1, 2, 3] {
+    print(item * 10)
+}
+# Saída: 10, 20, 30
+```
+
+---
+
+## range
+
+Gera uma sequência de números para iterar:
+
+```
+range(início, fim)
+range(início, fim, passo)
+```
+
+O valor `fim` **não é incluído** (exclusivo).
+
+```js
+# De 0 até 4
+for i in range(0, 5) {
+    print(i)
+}
+# Saída: 0, 1, 2, 3, 4
+
+# De 0 até 8, de 2 em 2
+for i in range(0, 10, 2) {
+    print(i)
+}
+# Saída: 0, 2, 4, 6, 8
+
+# Contagem regressiva
+for i in range(5, 0, -1) {
+    print(i)
+}
+# Saída: 5, 4, 3, 2, 1
+```
+
+---
+
+## enumerate
+
+Itera sobre um array com **índice e valor**:
+
+```js
+let cores = ["vermelho", "verde", "azul"]
+for i, cor in enumerate(cores) {
+    print(i + ": " + cor)
+}
+# Saída:
+# 0: vermelho
+# 1: verde
+# 2: azul
+```
+
+---
+
+## break
+
+Interrompe o loop atual:
+
+```js
+for i in range(0, 100) {
+    if (i == 5) {
+        break
+    }
+    print(i)
+}
+# Saída: 0, 1, 2, 3, 4
+```
+
+---
+
+## continue
+
+Pula para a próxima iteração do loop:
+
+```js
+for i in range(0, 10) {
+    if (i % 2 == 0) {
+        continue  # pula os pares
+    }
+    print(i)
+}
+# Saída: 1, 3, 5, 7, 9
+```
+
+---
+
+## Resumo
+
+| Estrutura    | Uso                                          |
+|-------------|----------------------------------------------|
+| `if/elif/else` | Execução condicional                      |
+| `while`     | Repete enquanto condição for verdadeira       |
+| `do-while`  | Executa pelo menos uma vez, depois repete     |
+| `for`       | Loop clássico com inicialização/condição/passo|
+| `for-in`    | Itera sobre elementos de um array            |
+| `range`     | Gera sequência numérica para loop             |
+| `enumerate` | Itera com índice e valor                      |
+| `break`     | Sai do loop                                   |
+| `continue`  | Pula para próxima iteração                    |
