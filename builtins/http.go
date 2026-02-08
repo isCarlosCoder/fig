@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -376,13 +377,15 @@ func init() {
 			html := string(data)
 			if len(args) == 2 && args[1].Type == environment.ObjectType {
 				for _, k := range args[1].Obj.Keys {
-					placeholder := "{{" + k + "}}"
+					re := regexp.MustCompile(`\{\{\s*` + regexp.QuoteMeta(k) + `\s*\}\}`)
 					val := args[1].Obj.Entries[k]
+					var replacement string
 					if val.Type == environment.StringType {
-						html = strings.ReplaceAll(html, placeholder, val.Str)
+						replacement = val.Str
 					} else {
-						html = strings.ReplaceAll(html, placeholder, val.String())
+						replacement = val.String()
 					}
+					html = re.ReplaceAllString(html, replacement)
 				}
 			}
 			return environment.NewString(html), nil
