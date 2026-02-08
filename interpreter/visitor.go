@@ -437,16 +437,21 @@ func (v *FigVisitor) VisitPrintStmt(ctx *parser.PrintStmtContext) interface{} {
 	if v.RuntimeErr != nil {
 		return nil
 	}
-	val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
-	if v.RuntimeErr != nil {
-		return nil
+	exprs := ctx.AllExpr()
+	parts := make([]string, 0, len(exprs))
+	for _, e := range exprs {
+		val := v.VisitExpr(e.(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if v.pendingLoopSignal != nil {
+			sig := v.pendingLoopSignal
+			v.pendingLoopSignal = nil
+			return sig
+		}
+		parts = append(parts, val.String())
 	}
-	if v.pendingLoopSignal != nil {
-		sig := v.pendingLoopSignal
-		v.pendingLoopSignal = nil
-		return sig
-	}
-	fmt.Fprintln(v.out, val.String())
+	fmt.Fprintln(v.out, strings.Join(parts, " "))
 	return nil
 }
 

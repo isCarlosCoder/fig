@@ -123,7 +123,7 @@ memberAssign
     ;
 
 printStmt
-    : TK_PRINT LPAREN expr RPAREN SEMICOLON?
+    : TK_PRINT LPAREN expr (COMMA expr)* RPAREN SEMICOLON?
     ;
 
 expr: logicalOr ;
