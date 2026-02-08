@@ -5,7 +5,7 @@ options {
 }
 
 program
-    : statements+ EOF
+    : statements* EOF
     ;
 
 statements
