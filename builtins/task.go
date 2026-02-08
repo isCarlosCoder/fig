@@ -24,7 +24,7 @@ type TaskResult struct {
 type taskHandle struct {
 	id     int64
 	done   chan struct{} // closed when the task completes
-	result TaskResult   // populated before done is closed
+	result TaskResult    // populated before done is closed
 }
 
 var (

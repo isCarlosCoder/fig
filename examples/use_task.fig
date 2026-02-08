@@ -1,0 +1,118 @@
+use "task"
+use "system"
+
+# ── 1. Spawn + Await básico ──
+print("=== spawn + await ===")
+let t = task.spawn(fn() { return 42 })
+print(task.await(t))
+
+# ── 2. Retorno com expressão ──
+print("=== retorno com expressão ===")
+let t2 = task.spawn(fn() { return 21 * 2 })
+let v = task.await(t2)
+print(v)
+
+# ── 3. Fire and forget ──
+print("=== fire and forget ===")
+task.spawn(fn() {
+    system.sleep(50)
+})
+print("continuou sem esperar")
+
+# ── 4. Closures ──
+print("=== closures ===")
+let x = 10
+let t3 = task.spawn(fn() { return x * 5 })
+print(task.await(t3))
+
+# ── 5. Chamando funções do usuário ──
+print("=== funções do usuário ===")
+fn dobro(n) { return n * 2 }
+let t4 = task.spawn(fn() { return dobro(25) })
+print(task.await(t4))
+
+# ── 6. Execução paralela ──
+print("=== execução paralela ===")
+let inicio = system.now()
+
+fn trabalho(n) {
+    system.sleep(100)
+    return n * 10
+}
+
+let p1 = task.spawn(fn() { return trabalho(1) })
+let p2 = task.spawn(fn() { return trabalho(2) })
+let p3 = task.spawn(fn() { return trabalho(3) })
+
+print(task.await(p1))
+print(task.await(p2))
+print(task.await(p3))
+
+let tempo = system.now() - inicio
+print("tempo total: ~" + tempo + "ms (deve ser ~100, não ~300)")
+
+# ── 7. awaitTimeout (sucesso) ──
+print("=== awaitTimeout sucesso ===")
+let t5 = task.spawn(fn() { return 99 })
+print(task.awaitTimeout(t5, 1000))
+
+# ── 8. awaitTimeout (timeout) ──
+print("=== awaitTimeout timeout ===")
+let t6 = task.spawn(fn() {
+    system.sleep(2000)
+    return 99
+})
+let v2 = try task.awaitTimeout(t6, 100) onerror {
+    return "timeout!"
+}
+print(v2)
+
+# ── 9. Race ──
+print("=== race ===")
+let r1 = task.spawn(fn() { system.sleep(500); return "lento" })
+let r2 = task.spawn(fn() { return "rápido" })
+print(task.race([r1, r2]))
+
+# ── 10. Pipeline (task depende de outra) ──
+print("=== pipeline ===")
+let etapa1 = task.spawn(fn() { return 10 })
+let etapa2 = task.spawn(fn() { return task.await(etapa1) * 3 })
+print(task.await(etapa2))
+
+# ── 11. Tratamento de erro ──
+print("=== erro propagado ===")
+use "debug"
+let t7 = task.spawn(fn() {
+    debug.panic("algo deu errado")
+})
+let v3 = try task.await(t7) onerror(e) {
+    return "capturado: " + e
+}
+print(v3)
+
+# ── 12. Worker pool ──
+print("=== worker pool ===")
+use "arrays"
+
+fn worker(n) {
+    system.sleep(50)
+    return n * 2
+}
+
+fn spawnWorker(n) {
+    return task.spawn(fn() { return worker(n) })
+}
+
+let tarefas = []
+for i in [1, 2, 3, 4, 5] {
+    arrays.push(tarefas, spawnWorker(i))
+}
+
+for t in tarefas {
+    print(task.await(t))
+}
+
+# ── 13. Retorno null ──
+print("=== retorno null ===")
+let t8 = task.spawn(fn() {})
+print(task.await(t8))
