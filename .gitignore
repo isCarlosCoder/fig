@@ -1,0 +1,18 @@
+# IDE / Editor
+.vscode/
+.idea/
+
+# Local / dev notes
+local/
+
+# Binários
+fig
+*.exe
+*.out
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+*.test
