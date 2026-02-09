@@ -47,6 +47,9 @@ type FigVisitor struct {
 	// loopDepth indicates how many nested loops we're currently in (to validate break/continue)
 	loopDepth int
 
+	// evalSteps counts expression evaluation steps to detect runaway recursion during debugging
+	evalSteps int
+
 	// pendingLoopSignal holds a break/continue signal from a try/onerror block
 	// that needs to propagate to the enclosing loop.
 	pendingLoopSignal interface{}
@@ -56,6 +59,9 @@ type FigVisitor struct {
 
 	// projectRoot is the directory that contains fig.toml for module resolution
 	projectRoot string
+
+	// callDepth tracks nested function call depth to detect runaway recursion during debugging
+	callDepth int
 
 	// importedFiles tracks already-imported absolute paths to prevent circular imports
 	importedFiles map[string]bool
@@ -1093,6 +1099,13 @@ func (v *FigVisitor) VisitUnary(ctx *parser.UnaryContext) interface{} {
 }
 
 func (v *FigVisitor) VisitPrimary(ctx *parser.PrimaryContext) interface{} {
+	// Debug: count evaluation steps and detect runaway recursion
+	v.evalSteps++
+	if v.evalSteps > 20000 {
+		// Too many evaluation steps: set a runtime error to avoid Go stack overflow
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "maximum evaluation steps exceeded - possible infinite recursion", 1)
+		return environment.NewNil()
+	}
 	if ctx.NUMBER() != nil {
 		s := ctx.NUMBER().GetText()
 		f, err := strconv.ParseFloat(s, 64)
@@ -1315,6 +1328,13 @@ func (v *FigVisitor) instantiateStruct(line, col int, sd *environment.StructDef,
 
 // callMethod calls a method on an instance, binding "this" in the method scope.
 func (v *FigVisitor) callMethod(line, col int, receiver environment.Value, fnVal environment.Value, args []environment.Value) environment.Value {
+	// Debug: increment call depth and guard against runaway recursion for methods too
+	v.callDepth++
+	defer func() { v.callDepth-- }()
+	if v.callDepth > 100 {
+		v.RuntimeErr = v.makeRuntimeError(line, col, "maximum call depth exceeded", 1)
+		return environment.NewNil()
+	}
 	if fnVal.Type != environment.FunctionType || fnVal.Func == nil {
 		v.RuntimeErr = v.makeRuntimeError(line, col, "not a method", 1)
 		return environment.NewNil()
@@ -1349,6 +1369,15 @@ func (v *FigVisitor) callMethod(line, col int, receiver environment.Value, fnVal
 
 // callFunction evaluates a function call using a resolved Value and arguments.
 func (v *FigVisitor) callFunction(line, col int, fnVal environment.Value, args []environment.Value, callee string) interface{} {
+	// Debug: increment call depth and guard against runaway recursion
+	v.callDepth++
+	defer func() { v.callDepth-- }()
+	if v.callDepth > 100 {
+		// Too deep: set a runtime error instead of letting Go stack overflow
+		v.RuntimeErr = v.makeRuntimeError(line, col, "maximum call depth exceeded", 1)
+		return environment.NewNil()
+	}
+
 	// Handle builtin functions
 	if fnVal.Type == environment.BuiltinFnType {
 		if fnVal.Builtin == nil {
