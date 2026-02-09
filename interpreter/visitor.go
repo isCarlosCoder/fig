@@ -230,9 +230,9 @@ func (v *FigVisitor) VisitUseStmt(ctx *parser.UseStmtContext) interface{} {
 		}
 	}
 
-	// If loading the functional module, set FnCaller so functional helpers
-	// can invoke user-defined Fig functions (not just builtins).
-	if modName == "functional" {
+	// If loading a module that needs to invoke user-defined Fig functions,
+	// set FnCaller so builtin helpers can call them (not just builtins).
+	if modName == "functional" || modName == "arrays" {
 		builtins.FnCaller = func(fn environment.Value, args []environment.Value) (environment.Value, error) {
 			savedErr := v.RuntimeErr
 			v.RuntimeErr = nil

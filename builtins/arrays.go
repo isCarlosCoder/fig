@@ -208,35 +208,94 @@ func init() {
 			if args[0].Type != environment.ArrayType || args[0].Arr == nil {
 				return environment.NewNil(), fmt.Errorf("map() first argument must be an array")
 			}
-			if args[1].Type != environment.BuiltinFnType && args[1].Type != environment.FunctionType {
+			if !isCallable(args[1]) {
 				return environment.NewNil(), fmt.Errorf("map() second argument must be a function")
 			}
-			// map needs the interpreter to call functions — store callback for later
-			return environment.NewNil(), fmt.Errorf("map() requires interpreter callback (use for loop instead for now)")
+			arr := *args[0].Arr
+			result := make([]environment.Value, len(arr))
+			for i, v := range arr {
+				val, err := invokeFn(args[1], []environment.Value{v})
+				if err != nil {
+					return environment.NewNil(), fmt.Errorf("map() callback error at index %d: %v", i, err)
+				}
+				result[i] = val
+			}
+			return environment.NewArray(result), nil
 		}),
 
-		// filter(arr, fn)
+		// filter(arr, fn) — returns new array with elements where fn returns truthy
 		fn("filter", func(args []environment.Value) (environment.Value, error) {
 			if len(args) != 2 {
 				return environment.NewNil(), fmt.Errorf("filter() expects 2 arguments, got %d", len(args))
 			}
-			return environment.NewNil(), fmt.Errorf("filter() requires interpreter callback (use for loop instead for now)")
+			if args[0].Type != environment.ArrayType || args[0].Arr == nil {
+				return environment.NewNil(), fmt.Errorf("filter() first argument must be an array")
+			}
+			if !isCallable(args[1]) {
+				return environment.NewNil(), fmt.Errorf("filter() second argument must be a function")
+			}
+			arr := *args[0].Arr
+			var result []environment.Value
+			for i, v := range arr {
+				val, err := invokeFn(args[1], []environment.Value{v})
+				if err != nil {
+					return environment.NewNil(), fmt.Errorf("filter() callback error at index %d: %v", i, err)
+				}
+				if val.IsTruthy() {
+					result = append(result, v)
+				}
+			}
+			if result == nil {
+				result = []environment.Value{}
+			}
+			return environment.NewArray(result), nil
 		}),
 
-		// reduce(arr, fn, init)
+		// reduce(arr, fn, init) — reduces array to a single value
 		fn("reduce", func(args []environment.Value) (environment.Value, error) {
 			if len(args) != 3 {
 				return environment.NewNil(), fmt.Errorf("reduce() expects 3 arguments, got %d", len(args))
 			}
-			return environment.NewNil(), fmt.Errorf("reduce() requires interpreter callback (use for loop instead for now)")
+			if args[0].Type != environment.ArrayType || args[0].Arr == nil {
+				return environment.NewNil(), fmt.Errorf("reduce() first argument must be an array")
+			}
+			if !isCallable(args[1]) {
+				return environment.NewNil(), fmt.Errorf("reduce() second argument must be a function")
+			}
+			arr := *args[0].Arr
+			acc := args[2]
+			for i, v := range arr {
+				val, err := invokeFn(args[1], []environment.Value{acc, v})
+				if err != nil {
+					return environment.NewNil(), fmt.Errorf("reduce() callback error at index %d: %v", i, err)
+				}
+				acc = val
+			}
+			return acc, nil
 		}),
 
-		// find(arr, fn)
+		// find(arr, fn) — returns first element where fn returns truthy, or nil
 		fn("find", func(args []environment.Value) (environment.Value, error) {
 			if len(args) != 2 {
 				return environment.NewNil(), fmt.Errorf("find() expects 2 arguments, got %d", len(args))
 			}
-			return environment.NewNil(), fmt.Errorf("find() requires interpreter callback (use for loop instead for now)")
+			if args[0].Type != environment.ArrayType || args[0].Arr == nil {
+				return environment.NewNil(), fmt.Errorf("find() first argument must be an array")
+			}
+			if !isCallable(args[1]) {
+				return environment.NewNil(), fmt.Errorf("find() second argument must be a function")
+			}
+			arr := *args[0].Arr
+			for i, v := range arr {
+				val, err := invokeFn(args[1], []environment.Value{v})
+				if err != nil {
+					return environment.NewNil(), fmt.Errorf("find() callback error at index %d: %v", i, err)
+				}
+				if val.IsTruthy() {
+					return v, nil
+				}
+			}
+			return environment.NewNil(), nil
 		}),
 
 		// index(arr, v) — returns index of v or -1

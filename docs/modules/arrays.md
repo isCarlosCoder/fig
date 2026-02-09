@@ -172,25 +172,60 @@ arrays.shuffle(cartas)
 print(cartas)  # ex: [3, 1, 5, 2, 4]
 ```
 
-### Funções de ordem superior (map, filter, reduce, find)
+## Funções de ordem superior
 
-O módulo declara as funções **`map`**, **`filter`**, **`reduce`** e **`find`** como helpers de ordem superior. No entanto, atualmente elas são *stubs* que exigem um callback do interpretador e retornam erro quando chamadas diretamente a partir do código.
+### arrays.map(arr, fn)
 
-Use um laço `for` para transformar, filtrar ou reduzir arrays por enquanto. Exemplos:
+Retorna um **novo** array com `fn` aplicada a cada elemento:
 
 ```js
-# map-like usando for
-let src = [1, 2, 3]
-let mapped = []
-for v in src {
-    arrays.push(mapped, v * 2)
-}
+let nums = [1, 2, 3, 4, 5]
+let dobro = arrays.map(nums, fn(x) { return x * 2 })
+print(dobro)  # [2, 4, 6, 8, 10]
+```
 
-# filter-like usando for
-let filtered = []
-for v in src {
-    if (v > 1) { arrays.push(filtered, v) }
-}
+### arrays.filter(arr, fn)
+
+Retorna um **novo** array com os elementos para os quais `fn` retorna `true`:
+
+```js
+let nums = [1, 2, 3, 4, 5]
+let pares = arrays.filter(nums, fn(x) { return x % 2 == 0 })
+print(pares)  # [2, 4]
+```
+
+### arrays.reduce(arr, fn, valorInicial)
+
+Reduz o array a um único valor, chamando `fn(acumulador, elemento)` para cada item:
+
+```js
+let nums = [1, 2, 3, 4, 5]
+let soma = arrays.reduce(nums, fn(acc, x) { return acc + x }, 0)
+print(soma)  # 15
+```
+
+### arrays.find(arr, fn)
+
+Retorna o **primeiro** elemento para o qual `fn` retorna `true`, ou `null` se nenhum satisfizer:
+
+```js
+let nums = [1, 2, 3, 4, 5]
+let achado = arrays.find(nums, fn(x) { return x > 3 })
+print(achado)  # 4
+
+let nenhum = arrays.find(nums, fn(x) { return x > 100 })
+print(nenhum)  # null
+```
+
+### Encadeando funções
+
+```js
+# map + filter: triplicar e manter só > 6
+let result = arrays.filter(
+    arrays.map([1, 2, 3, 4, 5], fn(x) { return x * 3 }),
+    fn(x) { return x > 6 }
+)
+print(result)  # [9, 12, 15]
 ```
 
 ## Referência rápida
@@ -211,8 +246,8 @@ for v in src {
 | `arrays.contains(arr, v)`      | Verificar se contém                    | Não                |
 | `arrays.unique(arr)`           | Remover duplicatas                     | Não                |
 | `arrays.shuffle(arr)`          | Embaralhar                             | Sim                |
-| `arrays.map(arr, fn)`          | Mapear cada elemento (requer callback do interpretador — não suportado) | Não |
-| `arrays.filter(arr, fn)`       | Filtrar elementos (requer callback do interpretador — não suportado) | Não |
-| `arrays.reduce(arr, fn, init)` | Reduzir array a um valor (requer callback do interpretador — não suportado) | Não |
-| `arrays.find(arr, fn)`         | Encontrar elemento que satisfaça `fn` (requer callback do interpretador — não suportado) | Não |
+| `arrays.map(arr, fn)`          | Mapear cada elemento                   | Não                |
+| `arrays.filter(arr, fn)`       | Filtrar elementos                      | Não                |
+| `arrays.reduce(arr, fn, init)` | Reduzir array a um valor               | Não                |
+| `arrays.find(arr, fn)`         | Encontrar primeiro que satisfaça `fn`  | Não                |
 | `arrays.len(arr)`              | Comprimento                            | Não                |
