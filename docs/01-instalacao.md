@@ -39,6 +39,12 @@ Execute com:
 fig run hello.fig
 ```
 
+Ou execute direto o arquivo:
+
+```bash
+fig hello.fig
+```
+
 Saída:
 
 ```
@@ -47,11 +53,16 @@ Hello, World!
 
 ## Comandos disponíveis
 
-| Comando            | Descrição                        |
-|--------------------|----------------------------------|
-| `fig run <arquivo>` | Executa um arquivo `.fig`       |
-| `fig --help` ou `fig -h`  | Mostra a ajuda            |
-| `fig --version` ou `fig -v` | Mostra a versão (ex: `0.1.0`) |
+> **Nota:** `fig run` sem argumentos procura `fig.toml` no diretório atual e executa o campo `project.main` (padrão: `src/main.fig`).
+
+| Comando               | Descrição                                  |
+|-----------------------|--------------------------------------------|
+| `fig run <arquivo>`   | Executa um arquivo `.fig`                   |
+| `fig run`             | Executa o `main` do projeto via `fig.toml`  |
+| `fig <arquivo>`       | Executa um arquivo `.fig` diretamente       |
+| `fig init <dir>`      | Cria um projeto Fig com estrutura padrão    |
+| `fig --help` ou `fig -h`  | Mostra a ajuda                          |
+| `fig --version` ou `fig -v` | Mostra a versão (ex: `0.1.0`)       |
 
 ## Estrutura de um programa Fig
 

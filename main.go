@@ -8,6 +8,7 @@ import (
 
 	"github.com/iscarloscoder/fig/environment"
 	"github.com/iscarloscoder/fig/interpreter"
+	"github.com/pelletier/go-toml/v2"
 )
 
 const Version = "0.1.0"
@@ -16,7 +17,8 @@ func printHelp(out io.Writer) {
 	fmt.Fprintln(out, "FigLang - a small interpreted language")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Usage:")
-	fmt.Fprintln(out, "  fig run <file>   Run a .fig source file")
+	fmt.Fprintln(out, "  fig <file>       Run a .fig source file")
+	fmt.Fprintln(out, "  fig run [file]   Run a .fig source file or project main")
 	fmt.Fprintln(out, "  fig init <dir>   Create a new Fig project")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Flags:")
@@ -42,12 +44,16 @@ func main() {
 			fmt.Println(Version)
 			return
 		case "run":
-			// run subcommand: expect next arg as file
-			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "run requires a file argument")
+			// run subcommand: optional file argument
+			var path string
+			if i+1 < len(args) {
+				path = args[i+1]
+			}
+			resolved, err := resolveRunTarget(path, os.Stderr)
+			if err != nil {
 				os.Exit(1)
 			}
-			path := args[i+1]
+			path = resolved
 			if err := runFile(path, os.Stdout, os.Stderr); err != nil {
 				// Pretty output already printed to stderr by interpreter; exit non-zero
 				os.Exit(1)
@@ -65,6 +71,18 @@ func main() {
 			}
 			return
 		default:
+			// allow running a file directly: fig <file>
+			if isFigFile(s) {
+				resolved, err := resolveRunTarget(s, os.Stderr)
+				if err != nil {
+					os.Exit(1)
+				}
+				if err := runFile(resolved, os.Stdout, os.Stderr); err != nil {
+					os.Exit(1)
+				}
+				return
+			}
+
 			// unknown top-level token -> show help
 			fmt.Fprintf(os.Stderr, "unknown command or flag: %s\n", s)
 			printHelp(os.Stderr)
@@ -89,6 +107,62 @@ func runFile(path string, out io.Writer, errOut io.Writer) error {
 		return err
 	}
 	return nil
+}
+
+func resolveRunTarget(path string, errOut io.Writer) (string, error) {
+	if path != "" {
+		return path, nil
+	}
+
+	projectPath, err := findProjectToml()
+	if err != nil {
+		fmt.Fprintln(errOut, "run requires a file argument or a fig.toml in the current directory")
+		return "", err
+	}
+
+	config, err := loadProjectToml(projectPath)
+	if err != nil {
+		fmt.Fprintf(errOut, "cannot read fig.toml: %v\n", err)
+		return "", err
+	}
+
+	mainPath := config.Project.Main
+	if mainPath == "" {
+		mainPath = "src/main.fig"
+	}
+
+	baseDir := filepath.Dir(projectPath)
+	return filepath.Join(baseDir, mainPath), nil
+}
+
+func findProjectToml() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	path := filepath.Join(cwd, "fig.toml")
+	if _, err := os.Stat(path); err != nil {
+		return "", err
+	}
+
+	return path, nil
+}
+
+func loadProjectToml(path string) (figTomlConfig, error) {
+	var cfg figTomlConfig
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return cfg, err
+	}
+	if err := toml.Unmarshal(data, &cfg); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
+}
+
+func isFigFile(path string) bool {
+	return filepath.Ext(path) == ".fig"
 }
 
 func initProject(target string, out io.Writer, errOut io.Writer) error {
@@ -158,23 +232,51 @@ func initProject(target string, out io.Writer, errOut io.Writer) error {
 		return err
 	}
 
-	figToml := fmt.Sprintf(`[project]
-name = "%s"
-version = "0.1.0"
-description = ""
-type = "application"
-main = "src/main.fig"
-
-[authors]
-name = ""
-
-[dependencies]
-`, projName)
-	if err := os.WriteFile(filepath.Join(absPath, "fig.toml"), []byte(figToml), 0644); err != nil {
+	figTomlData := figTomlConfig{
+		Project: figProjectConfig{
+			Name:        projName,
+			Version:     "0.1.0",
+			Description: "",
+			Type:        "application",
+			Main:        "src/main.fig",
+		},
+		Authors: figAuthorsConfig{Name: ""},
+		Deps:    map[string]figDependencyConfig{},
+	}
+	figTomlBytes, err := toml.Marshal(figTomlData)
+	if err != nil {
+		fmt.Fprintf(errOut, "cannot serialize fig.toml: %v\n", err)
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(absPath, "fig.toml"), figTomlBytes, 0644); err != nil {
 		fmt.Fprintf(errOut, "cannot write fig.toml: %v\n", err)
 		return err
 	}
 
 	fmt.Fprintf(out, "Project initialized at %s\n", absPath)
 	return nil
+}
+
+type figTomlConfig struct {
+	Project figProjectConfig               `toml:"project"`
+	Authors figAuthorsConfig               `toml:"authors"`
+	Deps    map[string]figDependencyConfig `toml:"dependencies"`
+}
+
+type figProjectConfig struct {
+	Name        string `toml:"name"`
+	Version     string `toml:"version"`
+	Description string `toml:"description"`
+	Type        string `toml:"type"`
+	Main        string `toml:"main"`
+}
+
+type figAuthorsConfig struct {
+	Name string `toml:"name"`
+}
+
+type figDependencyConfig struct {
+	Version  string `toml:"version"`
+	Source   string `toml:"source"`
+	Location string `toml:"location"`
 }
