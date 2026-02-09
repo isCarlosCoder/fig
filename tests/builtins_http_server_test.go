@@ -132,8 +132,11 @@ func TestHTTPServerSendText(t *testing.T) {
 http.route("GET", "/", fn(req, res) {
 	res.send("hello from fig")
 })
-http.listen(0)`
+http.listen(0, fn() {
+	http.route("GET", "/cb", fn(req, res) { res.send("cb-ok") })
+})`
 
+	// start server and verify route added before and by onStart callback
 	go runFig(t, src)
 
 	// Wait for server to start and get its address
@@ -147,6 +150,7 @@ http.listen(0)`
 	}
 	defer builtins.ShutdownServer()
 
+	// existing route
 	resp, err := http.Get("http://" + addr + "/")
 	if err != nil {
 		t.Fatalf("GET / error: %v", err)
@@ -162,6 +166,17 @@ http.listen(0)`
 	}
 	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/html") {
 		t.Errorf("expected text/html content-type, got %q", ct)
+	}
+
+	// route added by callback
+	resp2, err := http.Get("http://" + addr + "/cb")
+	if err != nil {
+		t.Fatalf("GET /cb error: %v", err)
+	}
+	defer resp2.Body.Close()
+	body2, _ := io.ReadAll(resp2.Body)
+	if resp2.StatusCode != 200 || string(body2) != "cb-ok" {
+		t.Fatalf("expected cb-ok from callback-added route, got status %d body %q", resp2.StatusCode, string(body2))
 	}
 }
 

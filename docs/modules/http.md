@@ -183,15 +183,21 @@ http.route("GET", "/", fn(req, res) {
 })
 ```
 
-### http.listen(porta)
+### http.listen(port, onStart?)
 
-Inicia o servidor HTTP na porta especificada. **Esta função bloqueia** a execução:
+Inicia o servidor HTTP na porta especificada. **Esta função bloqueia** a execução. Opcionalmente aceita um `onStart` que é uma função `fn()` chamada por você durante a inicialização do servidor (antes das rotas serem montadas), útil para registrar rotas dinamicamente ou executar inicializações.
 
 ```js
-print("Servidor rodando na porta 8080...")
-http.listen(8080)
-```
+use "http"
 
+# registra rota normalmente
+http.route("GET", "/", fn(req, res) { res.send("ok") })
+
+# start server na porta 8080 e registra rota adicional na inicialização
+http.listen(8080, fn() {
+    http.route("GET", "/cb", fn(req, res) { res.send("cb-ok") })
+})
+```
 ---
 
 ## Exemplo completo: API REST
@@ -267,7 +273,7 @@ if (http.isOk(res)) {
 | Função                              | Descrição                          |
 |------------------------------------|------------------------------------|
 | `http.route(method, path, handler)` | Registrar rota                     |
-| `http.listen(port)`                 | Iniciar servidor (bloqueia)        |
+| `http.listen(port, callback?)`      | Iniciar servidor (bloqueia)        |
 | `http.render(path, data?)`          | Template HTML com substituição     |
 | `res.send(body)`                    | Responder com texto/HTML           |
 | `res.json(obj)`                     | Responder com JSON                 |
