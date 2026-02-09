@@ -171,6 +171,10 @@ func runFile(path string, out io.Writer, errOut io.Writer) error {
 
 	// execute
 	if err := interpreter.Run(string(data), filename, environment.NewEnv(nil), out, errOut); err != nil {
+		// If Fig code called system.exit(code), honour it.
+		if code, ok := environment.IsExitSignal(err); ok {
+			os.Exit(code)
+		}
 		return err
 	}
 	return nil

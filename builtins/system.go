@@ -58,6 +58,7 @@ func init() {
 		}),
 
 		// exit(code) — exits the process with given code
+		// Uses panic(ExitSignal) so the signal can be caught by the test runner.
 		fn("exit", func(args []environment.Value) (environment.Value, error) {
 			code := 0
 			if len(args) == 1 {
@@ -67,8 +68,7 @@ func init() {
 				}
 				code = int(n)
 			}
-			os.Exit(code)
-			return environment.NewNil(), nil // unreachable
+			panic(environment.ExitSignal{Code: code})
 		}),
 
 		// args() — returns command-line arguments as array

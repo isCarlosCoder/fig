@@ -8,6 +8,7 @@ import (
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/iscarloscoder/fig/environment"
 	"github.com/iscarloscoder/fig/parser"
+
 )
 
 // Run parses and executes `source`.
@@ -17,6 +18,11 @@ func Run(source, filename string, global *environment.Env, out io.Writer, errOut
 	// safety net: recover from unexpected panics and produce a clean error
 	defer func() {
 		if r := recover(); r != nil {
+			// ExitSignal is a controlled exit from system.exit(); propagate as error, don't print.
+			if es, ok := r.(environment.ExitSignal); ok {
+				err = es
+				return
+			}
 			err = fmt.Errorf("internal error: %v", r)
 			if errOut != nil {
 				fmt.Fprintf(errOut, "\x1b[1;31minternal error:\x1b[0m %v\n", r)
