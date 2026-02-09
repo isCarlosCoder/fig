@@ -17,6 +17,10 @@ func TestRuntimeErrorShowsStackTraceForImportedFunction(t *testing.T) {
 	if !strings.Contains(errStr, "bad") {
 		t.Fatalf("expected stack trace to mention function name 'bad', got: %v", errStr)
 	}
+	// ensure snippet and caret are present for the originating frame
+	if !strings.Contains(errStr, "let x = s - 1") || !strings.Contains(errStr, "^") {
+		t.Fatalf("expected snippet and caret in error, got: %v", errStr)
+	}
 }
 
 func TestRuntimeErrorShowsStackTraceForLocalFunction(t *testing.T) {
@@ -30,5 +34,9 @@ func TestRuntimeErrorShowsStackTraceForLocalFunction(t *testing.T) {
 	}
 	if !strings.Contains(errStr, "bad") {
 		t.Fatalf("expected stack trace to mention function name 'bad', got: %v", errStr)
+	}
+	// ensure snippet and caret are present for the originating frame
+	if !strings.Contains(errStr, "let x = s - 1") || !strings.Contains(errStr, "^") {
+		t.Fatalf("expected snippet and caret in error, got: %v", errStr)
 	}
 }

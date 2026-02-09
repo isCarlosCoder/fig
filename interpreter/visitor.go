@@ -142,6 +142,7 @@ func (v *FigVisitor) makeRuntimeError(line, column int, msg string, length int) 
 	if len(v.frames) > 0 {
 		r.Frames = append([]StackFrame(nil), v.frames...)
 	}
+	// prefer snippet from current source if available
 	if v.srcLines != nil && line-1 >= 0 && line-1 < len(v.srcLines) {
 		ln := v.srcLines[line-1]
 		r.Snippet = ln
@@ -155,6 +156,36 @@ func (v *FigVisitor) makeRuntimeError(line, column int, msg string, length int) 
 			r.Length = len(ln) - r.ColumnStart
 		}
 	}
+
+	// If there's no snippet but we have frames, use the most-recent frame to provide context
+	if r.Snippet == "" && len(r.Frames) > 0 {
+		f := r.Frames[len(r.Frames)-1]
+		if f.File != "" && f.Line > 0 {
+			if data, err := os.ReadFile(f.File); err == nil {
+				lines := strings.Split(string(data), "\n")
+				if f.Line-1 >= 0 && f.Line-1 < len(lines) {
+					ln := lines[f.Line-1]
+					r.Snippet = ln
+					// use frame column if available
+					r.ColumnStart = f.Column
+					if r.ColumnStart < 0 {
+						r.ColumnStart = 0
+					}
+					if r.ColumnStart > len(ln) {
+						r.ColumnStart = len(ln)
+					}
+					if r.ColumnStart+r.Length > len(ln) {
+						r.Length = len(ln) - r.ColumnStart
+					}
+					// reflect frame location as the reported origin
+					r.File = f.File
+					r.Line = f.Line
+					r.Column = f.Column
+				}
+			}
+		}
+	}
+
 	return r
 }
 
@@ -1605,6 +1636,21 @@ func (v *FigVisitor) callFunction(line, col int, fnVal environment.Value, args [
 	// push a stack frame for this function call (show where it was defined)
 	v.pushFrame("function", name, fd.DefFile, fd.DefLine, 0)
 	defer v.popFrame()
+
+	// If the function has a definition file recorded, switch the source context
+	// while executing the body so runtime errors show the correct snippet.
+	prevSrc := v.srcLines
+	prevCurrentFile := v.currentFile
+	if fd.DefFile != "" {
+		if data, err := os.ReadFile(fd.DefFile); err == nil {
+			v.srcLines = strings.Split(string(data), "\n")
+			v.currentFile = fd.DefFile
+		}
+	}
+	defer func() {
+		v.srcLines = prevSrc
+		v.currentFile = prevCurrentFile
+	}()
 
 	// create a new scope for the function call (closure over the definition-time env)
 	prevEnv := v.env

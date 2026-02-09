@@ -36,6 +36,16 @@ func (e *RuntimeError) Error() string {
 		} else {
 			base = fmt.Sprintf("%d:%d: runtime error: %s", e.Line, e.Column, e.Message)
 		}
+		// If we have frames, annotate header with the most-recent frame for more direct context
+		if len(e.Frames) > 0 {
+			f := e.Frames[len(e.Frames)-1]
+			if f.Name != "" {
+				base = base + fmt.Sprintf(" — in %s (%s:%d:%d)", f.Name, f.File, f.Line, f.Column)
+			} else {
+				base = base + fmt.Sprintf(" — in %s:%d:%d", f.File, f.Line, f.Column)
+			}
+		}
+
 		if e.Snippet != "" {
 			caret := strings.Repeat(" ", e.ColumnStart)
 			if e.Length <= 0 {
