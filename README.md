@@ -132,6 +132,7 @@ meu-projeto/
 | 9 | [Print](docs/09-print.md) | Saída no terminal |
 | 10 | [Criacao de Modulos](docs/10-criacao-de-modulos.md) | Como criar e publicar modulos Fig |
 | 11 | [Testes com figtest](docs/11-figtest.md) | Framework de testes integrado |
+| 12 | [Enums](docs/12-enums.md) | Definição e uso de enums |
 
 ### Módulos Embutidos
 
