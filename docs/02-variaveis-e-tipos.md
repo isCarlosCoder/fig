@@ -83,6 +83,8 @@ print("Ativo: " + true)   # Ativo: true
 | `\\`      | Barra invertida |
 | `\"`      | Aspas duplas    |
 | `\'`      | Aspas simples   |
+| `\xNN`    | Hex (1 byte)    |
+| `\ooo`    | Octal (1 byte)  |
 
 ### Boolean (booleano)
 
