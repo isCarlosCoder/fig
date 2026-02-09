@@ -2,6 +2,7 @@ package environment
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -97,6 +98,10 @@ func NewInstance(inst *Instance) Value {
 func (v Value) String() string {
 	switch v.Type {
 	case NumberType:
+		// Format integers without scientific notation
+		if v.Num == math.Trunc(v.Num) && !math.IsInf(v.Num, 0) && !math.IsNaN(v.Num) {
+			return fmt.Sprintf("%.0f", v.Num)
+		}
 		return fmt.Sprintf("%g", v.Num)
 	case BooleanType:
 		return fmt.Sprintf("%t", v.Bool)

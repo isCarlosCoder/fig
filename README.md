@@ -110,7 +110,7 @@ meu-projeto/
 - Funções de primeira classe, closures e recursão
 - Structs com campos, construtores e métodos
 - Try/onerror para tratamento de erros
-- 15 módulos embutidos com 150+ funções
+- 16 módulos embutidos com 150+ funções
 - Cliente e servidor HTTP integrados
 - Importação de arquivos `.fig`, módulos builtin e módulos externos
 - Sintaxe limpa — ponto e vírgula opcional, comentários com `#`
@@ -152,6 +152,7 @@ meu-projeto/
 | [debug](docs/modules/debug.md) | Depuração e diagnóstico | 5 funções |
 | [runtime](docs/modules/runtime.md) | Informações do runtime | 5 funções |
 | [task](docs/modules/task.md) | Concorrência com goroutines | 4 funções |
+| [date](docs/modules/date.md) | Manipulação de datas e horários | 6 funções |
 | [figtest](docs/modules/figtest.md) | Framework de testes integrado | 20 funções |
 
 ## Exemplos rápidos

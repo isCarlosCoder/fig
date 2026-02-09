@@ -131,6 +131,7 @@ print(strings.contains("abc", "b"))  # true
 | `runtime`    | Informações do runtime (memória, versão, etc.)      |
 | `io`         | Leitura/escrita de arquivos e entrada do usuário    |
 | `http`       | Cliente e servidor HTTP                             |
+| `date`       | Manipulação de datas e horários                     |
 
 > Veja a documentação detalhada de cada módulo na pasta [modules/](modules/).
 
