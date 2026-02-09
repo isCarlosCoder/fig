@@ -72,4 +72,6 @@ COMMENT: '#' ~[\r\n]* -> skip ;
 // Fragments for building other tokens
 fragment DIGIT: [0-9] ;
 fragment LETTER: [a-zA-Z] ;
-fragment ESC: '\\' [btnfr"'\\] ;
+fragment HEX: [0-9a-fA-F] ;
+fragment OCTAL: [0-7] [0-7]? [0-7]? ;
+fragment ESC: '\\' ( [btnfr"'\\] | 'x' HEX HEX | OCTAL ) ;
