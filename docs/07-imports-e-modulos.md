@@ -119,7 +119,7 @@ print(strings.contains("abc", "b"))  # true
 |-------------|-----------------------------------------------------|
 | `math`       | Funções matemáticas e constantes (PI, E, sqrt, etc.)|
 | `strings`    | Manipulação de strings (upper, lower, trim, etc.)   |
-| `arrays`     | Operações com arrays (push, pop, sort, map, etc.)   |
+| `arrays`     | Operações com arrays (push, pop, sort, etc.)   |
 | `objects`    | Operações com objetos (keys, values, merge, etc.)   |
 | `types`      | Verificação e conversão de tipos                    |
 | `system`     | Data/hora, sleep, variáveis de ambiente             |

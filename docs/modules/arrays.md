@@ -172,6 +172,27 @@ arrays.shuffle(cartas)
 print(cartas)  # ex: [3, 1, 5, 2, 4]
 ```
 
+### Funções de ordem superior (map, filter, reduce, find)
+
+O módulo declara as funções **`map`**, **`filter`**, **`reduce`** e **`find`** como helpers de ordem superior. No entanto, atualmente elas são *stubs* que exigem um callback do interpretador e retornam erro quando chamadas diretamente a partir do código.
+
+Use um laço `for` para transformar, filtrar ou reduzir arrays por enquanto. Exemplos:
+
+```js
+# map-like usando for
+let src = [1, 2, 3]
+let mapped = []
+for v in src {
+    arrays.push(mapped, v * 2)
+}
+
+# filter-like usando for
+let filtered = []
+for v in src {
+    if (v > 1) { arrays.push(filtered, v) }
+}
+```
+
 ## Referência rápida
 
 | Função                          | Descrição                              | Modifica original? |
@@ -190,4 +211,8 @@ print(cartas)  # ex: [3, 1, 5, 2, 4]
 | `arrays.contains(arr, v)`      | Verificar se contém                    | Não                |
 | `arrays.unique(arr)`           | Remover duplicatas                     | Não                |
 | `arrays.shuffle(arr)`          | Embaralhar                             | Sim                |
+| `arrays.map(arr, fn)`          | Mapear cada elemento (requer callback do interpretador — não suportado) | Não |
+| `arrays.filter(arr, fn)`       | Filtrar elementos (requer callback do interpretador — não suportado) | Não |
+| `arrays.reduce(arr, fn, init)` | Reduzir array a um valor (requer callback do interpretador — não suportado) | Não |
+| `arrays.find(arr, fn)`         | Encontrar elemento que satisfaça `fn` (requer callback do interpretador — não suportado) | Não |
 | `arrays.len(arr)`              | Comprimento                            | Não                |
