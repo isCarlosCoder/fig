@@ -26,6 +26,7 @@ func printHelp(out io.Writer) {
 	fmt.Fprintln(out, "  fig test [pattern]  Run test files (tests/*.fig, *_test.fig)")
 	fmt.Fprintln(out, "  fig init <dir>      Create a new Fig project")
 	fmt.Fprintln(out, "  fig install <mod>   Install a module from GitHub")
+	fmt.Fprintln(out, "  fig remove <mod>    Remove an installed module")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Flags:")
 	fmt.Fprintln(out, "  -h, --help          Show this help")
@@ -83,6 +84,16 @@ func main() {
 			}
 			mod := args[i+1]
 			if err := installModule(mod, os.Stdout, os.Stderr); err != nil {
+				os.Exit(1)
+			}
+			return
+		case "remove":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "remove requires a module argument (owner/repo)")
+				os.Exit(1)
+			}
+			mod := args[i+1]
+			if err := removeModule(mod, os.Stdout, os.Stderr); err != nil {
 				os.Exit(1)
 			}
 			return
@@ -381,6 +392,69 @@ func installModule(mod string, out io.Writer, errOut io.Writer) error {
 	}
 
 	fmt.Fprintf(out, "Installed %s/%s (%s)\n", owner, repo, depVersion)
+	return nil
+}
+
+func removeModule(mod string, out io.Writer, errOut io.Writer) error {
+	owner, repo, err := parseModuleSpec(mod)
+	if err != nil {
+		fmt.Fprintf(errOut, "invalid module: %v\n", err)
+		return err
+	}
+
+	projectToml, err := findProjectToml()
+	if err != nil {
+		fmt.Fprintln(errOut, "fig.toml not found in current directory")
+		return err
+	}
+	projectRoot := filepath.Dir(projectToml)
+
+	// Remove the module directory from _modules/
+	moduleDir := filepath.Join(projectRoot, "_modules", repo)
+	if _, statErr := os.Stat(moduleDir); os.IsNotExist(statErr) {
+		fmt.Fprintf(errOut, "module not installed: %s\n", repo)
+		return fmt.Errorf("module not installed")
+	}
+	if err := os.RemoveAll(moduleDir); err != nil {
+		fmt.Fprintf(errOut, "cannot remove module directory: %v\n", err)
+		return err
+	}
+
+	// Remove the dependency from fig.toml
+	projCfg, err := loadProjectToml(projectToml)
+	if err != nil {
+		fmt.Fprintf(errOut, "cannot read fig.toml: %v\n", err)
+		return err
+	}
+
+	// Find and remove the dependency entry matching this module
+	found := false
+	if projCfg.Deps != nil {
+		source := fmt.Sprintf("github.com/%s/%s", owner, repo)
+		for name, dep := range projCfg.Deps {
+			if dep.Source == source || name == repo {
+				delete(projCfg.Deps, name)
+				found = true
+				break
+			}
+		}
+	}
+
+	if !found {
+		fmt.Fprintf(out, "warning: module %s/%s not found in fig.toml dependencies\n", owner, repo)
+	}
+
+	encoded, err := toml.Marshal(projCfg)
+	if err != nil {
+		fmt.Fprintf(errOut, "cannot serialize fig.toml: %v\n", err)
+		return err
+	}
+	if err := os.WriteFile(projectToml, encoded, 0644); err != nil {
+		fmt.Fprintf(errOut, "cannot write fig.toml: %v\n", err)
+		return err
+	}
+
+	fmt.Fprintf(out, "Removed %s/%s\n", owner, repo)
 	return nil
 }
 
