@@ -57,6 +57,8 @@ O diretorio `_modules/` deve estar no `.gitignore` do projeto:
 _modules/
 ```
 
+> Dependencias transitivas sao resolvidas no `_modules/` do projeto raiz. Modulos externos nao precisam levar `_modules` no repositorio.
+
 ## 5) Teste localmente
 
 Crie um projeto de teste em outro diretorio e instale seu modulo:

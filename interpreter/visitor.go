@@ -53,6 +53,9 @@ type FigVisitor struct {
 	// baseDir is the directory of the currently executing .fig file (for resolving imports)
 	baseDir string
 
+	// projectRoot is the directory that contains fig.toml for module resolution
+	projectRoot string
+
 	// importedFiles tracks already-imported absolute paths to prevent circular imports
 	importedFiles map[string]bool
 
@@ -441,13 +444,16 @@ func (v *FigVisitor) importModule(modPath, alias string, ctx *parser.ImportStmtC
 			"import mod: requires a module path", len(modPath))
 	}
 
-	projectToml, err := findProjectTomlFrom(v.baseDir)
-	if err != nil {
-		return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
-			"cannot locate fig.toml for module import", len(modPath))
+	projectRoot := v.projectRoot
+	if projectRoot == "" {
+		projectToml, err := findProjectTomlFrom(v.baseDir)
+		if err != nil {
+			return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+				"cannot locate fig.toml for module import", len(modPath))
+		}
+		projectRoot = filepath.Dir(projectToml)
+		v.projectRoot = projectRoot
 	}
-
-	projectRoot := filepath.Dir(projectToml)
 	moduleName := filepath.Base(moduleSpec)
 	if alias == "" {
 		alias = moduleName

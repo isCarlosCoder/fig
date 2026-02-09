@@ -57,6 +57,8 @@ print(lib.hello("Fig"))
 
 > Para instalar um módulo, use `fig install <owner>/<repo>` no diretório do projeto.
 
+> Dependências transitivas são resolvidas no `_modules/` do projeto raiz. Módulos externos não carregam um `_modules` próprio.
+
 ### Organização em pastas
 
 Você pode organizar seus arquivos em pastas:

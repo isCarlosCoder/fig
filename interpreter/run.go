@@ -43,6 +43,9 @@ func Run(source, filename string, global *environment.Env, out io.Writer, errOut
 	// Execute with visitor; collect runtime errors without crashing
 	v := NewFigVisitorWithSource(global, out, source)
 	v.baseDir = filepath.Dir(filename)
+	if projectToml, err := findProjectTomlFrom(v.baseDir); err == nil {
+		v.projectRoot = filepath.Dir(projectToml)
+	}
 	tree.Accept(v)
 	if v.RuntimeErr != nil {
 		// print a pretty runtime snippet to errOut as well
