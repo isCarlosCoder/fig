@@ -163,5 +163,133 @@ func init() {
 			}
 			return environment.NewBool(unicode.IsDigit(r[0])), nil
 		}),
+
+		// isWhitespace(s)
+		fn("isWhitespace", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("isWhitespace() expects 1 argument, got %d", len(args))
+			}
+			s, err := args[0].AsString()
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("isWhitespace() argument must be a string")
+			}
+			r := []rune(s)
+			if len(r) == 0 {
+				return environment.NewBool(false), nil
+			}
+			return environment.NewBool(unicode.IsSpace(r[0])), nil
+		}),
+
+		// isUpper / isLower
+		fn("isUpper", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("isUpper() expects 1 argument, got %d", len(args))
+			}
+			s, err := args[0].AsString()
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("isUpper() argument must be a string")
+			}
+			r := []rune(s)
+			if len(r) == 0 {
+				return environment.NewBool(false), nil
+			}
+			return environment.NewBool(unicode.IsUpper(r[0])), nil
+		}),
+
+		fn("isLower", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("isLower() expects 1 argument, got %d", len(args))
+			}
+			s, err := args[0].AsString()
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("isLower() argument must be a string")
+			}
+			r := []rune(s)
+			if len(r) == 0 {
+				return environment.NewBool(false), nil
+			}
+			return environment.NewBool(unicode.IsLower(r[0])), nil
+		}),
+
+		// isAlphaNum(s)
+		fn("isAlphaNum", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("isAlphaNum() expects 1 argument, got %d", len(args))
+			}
+			s, err := args[0].AsString()
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("isAlphaNum() argument must be a string")
+			}
+			r := []rune(s)
+			if len(r) == 0 {
+				return environment.NewBool(false), nil
+			}
+			return environment.NewBool(unicode.IsLetter(r[0]) || unicode.IsDigit(r[0])), nil
+		}),
+
+		// fromCodePoints(arr) -> string
+		fn("fromCodePoints", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("fromCodePoints() expects 1 argument, got %d", len(args))
+			}
+			if args[0].Type != environment.ArrayType || args[0].Arr == nil {
+				return environment.NewNil(), fmt.Errorf("fromCodePoints() argument must be an array of numbers")
+			}
+			arr := *args[0].Arr
+			runes := make([]rune, len(arr))
+			for i, v := range arr {
+				n, err := v.AsNumber()
+				if err != nil {
+					return environment.NewNil(), fmt.Errorf("fromCodePoints() array elements must be numbers")
+				}
+				ni := int(n)
+				if float64(ni) != n || ni < 0 || ni > 0x10FFFF {
+					return environment.NewNil(), fmt.Errorf("fromCodePoints() array contains invalid code point")
+				}
+				runes[i] = rune(ni)
+			}
+			return environment.NewString(string(runes)), nil
+		}),
+
+		// toCodePoints(s) -> alias for codePoints
+		fn("toCodePoints", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("toCodePoints() expects 1 argument, got %d", len(args))
+			}
+			s, err := args[0].AsString()
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("toCodePoints() argument must be a string")
+			}
+			r := []rune(s)
+			arr := make([]environment.Value, len(r))
+			for i, ru := range r {
+				arr[i] = environment.NewNumber(float64(ru))
+			}
+			return environment.NewArray(arr), nil
+		}),
+
+		// runeCount(s) and byteLength(s)
+		fn("runeCount", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("runeCount() expects 1 argument, got %d", len(args))
+			}
+			s, err := args[0].AsString()
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("runeCount() argument must be a string")
+			}
+			r := []rune(s)
+			return environment.NewNumber(float64(len(r))), nil
+		}),
+
+		fn("byteLength", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("byteLength() expects 1 argument, got %d", len(args))
+			}
+			s, err := args[0].AsString()
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("byteLength() argument must be a string")
+			}
+			return environment.NewNumber(float64(len(s))), nil
+		}),
 	))
 }

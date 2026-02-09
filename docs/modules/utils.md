@@ -88,3 +88,45 @@ use "utils";
 print(utils.isLetter("é"));  # true
 print(utils.isDigit("3"));   # true
 ```
+
+## isWhitespace(s) / isUpper(s) / isLower(s) / isAlphaNum(s)
+
+Unicode-aware helpers that inspect the *first rune* of a string.
+
+- `isWhitespace(s)` — returns `true` for Unicode space characters (includes NBSP and other space separators).
+- `isUpper(s)` / `isLower(s)` — check case of the first rune.
+- `isAlphaNum(s)` — true if first rune is a letter or a digit.
+
+Example:
+
+```js
+use "utils";
+print(utils.isWhitespace(" "));
+print(utils.isWhitespace(utils.fromCodePoint(160)));  # NBSP
+print(utils.isUpper("A"));
+print(utils.isLower("a"));
+print(utils.isAlphaNum("3"));
+```
+
+## fromCodePoints(arr) / toCodePoints(s)
+
+Batch conversions between arrays of Unicode code points and strings.
+
+```js
+use "utils";
+print(utils.fromCodePoints([72,101,108,108,111])); # Hello
+print(utils.toCodePoints("Hi"));                 # [72, 105]
+```
+
+## runeCount(s) / byteLength(s)
+
+- `runeCount(s)` — number of runes (user-perceived code points) in `s`.
+- `byteLength(s)` — number of bytes in UTF-8 encoding of `s`.
+
+Example:
+
+```js
+use "utils";
+print(utils.runeCount("A😀"));  # 2
+print(utils.byteLength("A😀")); # 5
+```
