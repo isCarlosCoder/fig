@@ -2,6 +2,8 @@
 
 **Fig** é uma linguagem de programação interpretada, dinâmica e de propósito geral, escrita em Go. Simples de aprender, poderosa o suficiente para scripts do dia a dia, APIs HTTP e automação.
 
+Este projeto foi criado como um passa tempo e pode conter varios erros, bugs e comportamentos inesperados.
+
 ```js
 use "math"
 
@@ -72,6 +74,7 @@ fig --help              # ajuda
 | 7 | [Imports e Módulos](docs/07-imports-e-modulos.md) | `import` (arquivos), `use` (builtins) |
 | 8 | [Try / Onerror](docs/08-try-onerror.md) | Tratamento de erros, fallback, break/continue |
 | 9 | [Print](docs/09-print.md) | Saída no terminal |
+| 10 | [Criacao de Modulos](docs/10-criacao-de-modulos.md) | Como criar e publicar modulos Fig |
 
 ### Módulos Embutidos
 
