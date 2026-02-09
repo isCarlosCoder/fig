@@ -54,7 +54,7 @@ fig --help              # ajuda
 - Funções de primeira classe, closures e recursão
 - Structs com campos, construtores e métodos
 - Try/onerror para tratamento de erros
-- 14 módulos embutidos com 130+ funções
+- 15 módulos embutidos com 150+ funções
 - Cliente e servidor HTTP integrados
 - Importação de arquivos `.fig`, módulos builtin e módulos externos
 - Sintaxe limpa — ponto e vírgula opcional, comentários com `#`
@@ -75,6 +75,7 @@ fig --help              # ajuda
 | 8 | [Try / Onerror](docs/08-try-onerror.md) | Tratamento de erros, fallback, break/continue |
 | 9 | [Print](docs/09-print.md) | Saída no terminal |
 | 10 | [Criacao de Modulos](docs/10-criacao-de-modulos.md) | Como criar e publicar modulos Fig |
+| 11 | [Testes com figtest](docs/11-figtest.md) | Framework de testes integrado |
 
 ### Módulos Embutidos
 
@@ -95,6 +96,7 @@ fig --help              # ajuda
 | [debug](docs/modules/debug.md) | Depuração e diagnóstico | 5 funções |
 | [runtime](docs/modules/runtime.md) | Informações do runtime | 5 funções |
 | [task](docs/modules/task.md) | Concorrência com goroutines | 4 funções |
+| [figtest](docs/modules/figtest.md) | Framework de testes integrado | 20 funções |
 
 ## Exemplos rápidos
 

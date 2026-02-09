@@ -253,6 +253,29 @@ func (v *FigVisitor) VisitUseStmt(ctx *parser.UseStmtContext) interface{} {
 		}
 	}
 
+	// If loading the figtest module, set FigtestCaller so test functions
+	// can invoke user-defined Fig callbacks and capture assertion errors.
+	if modName == "figtest" {
+		builtins.FigtestCaller = func(fn environment.Value, args []environment.Value) (environment.Value, error) {
+			savedErr := v.RuntimeErr
+			v.RuntimeErr = nil
+			result := v.callFunction(0, 0, fn, args)
+			if v.RuntimeErr != nil {
+				err := v.RuntimeErr
+				v.RuntimeErr = savedErr
+				if re, ok := err.(*RuntimeError); ok {
+					return environment.NewNil(), fmt.Errorf("%s", re.Message)
+				}
+				return environment.NewNil(), err
+			}
+			v.RuntimeErr = savedErr
+			if val, ok := result.(environment.Value); ok {
+				return val, nil
+			}
+			return environment.NewNil(), nil
+		}
+	}
+
 	// If loading the task module, set TaskSpawner so task.spawn can execute
 	// user-defined Fig functions in separate goroutines.
 	if modName == "task" {

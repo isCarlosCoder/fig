@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/iscarloscoder/fig/builtins"
 	"github.com/iscarloscoder/fig/environment"
 	"github.com/iscarloscoder/fig/interpreter"
 	"github.com/pelletier/go-toml/v2"
@@ -20,14 +21,15 @@ func printHelp(out io.Writer) {
 	fmt.Fprintln(out, "FigLang - a small interpreted language")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Usage:")
-	fmt.Fprintln(out, "  fig <file>       Run a .fig source file")
-	fmt.Fprintln(out, "  fig run [file]   Run a .fig source file or project main")
-	fmt.Fprintln(out, "  fig init <dir>   Create a new Fig project")
-	fmt.Fprintln(out, "  fig install <mod> Install a module from GitHub")
+	fmt.Fprintln(out, "  fig <file>          Run a .fig source file")
+	fmt.Fprintln(out, "  fig run [file]      Run a .fig source file or project main")
+	fmt.Fprintln(out, "  fig test [pattern]  Run test files (tests/*.fig, *_test.fig)")
+	fmt.Fprintln(out, "  fig init <dir>      Create a new Fig project")
+	fmt.Fprintln(out, "  fig install <mod>   Install a module from GitHub")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Flags:")
-	fmt.Fprintln(out, "  -h, --help       Show this help")
-	fmt.Fprintln(out, "  -v, --version    Show version")
+	fmt.Fprintln(out, "  -h, --help          Show this help")
+	fmt.Fprintln(out, "  -v, --version       Show version")
 }
 
 func main() {
@@ -81,6 +83,22 @@ func main() {
 			}
 			mod := args[i+1]
 			if err := installModule(mod, os.Stdout, os.Stderr); err != nil {
+				os.Exit(1)
+			}
+			return
+		case "test":
+			// test subcommand: discover and run test files
+			patterns := args[i+1:]
+			verbose := false
+			var filtered []string
+			for _, p := range patterns {
+				if p == "--verbose" || p == "-V" {
+					verbose = true
+				} else {
+					filtered = append(filtered, p)
+				}
+			}
+			if err := runTests(filtered, verbose, os.Stdout, os.Stderr); err != nil {
 				os.Exit(1)
 			}
 			return
@@ -447,6 +465,160 @@ func extractZip(zipPath, destDir string) error {
 	}
 
 	return nil
+}
+
+// runTests discovers and executes Fig test files, printing results and a summary.
+func runTests(patterns []string, verbose bool, out io.Writer, errOut io.Writer) error {
+	projectToml, findErr := findProjectToml()
+	var projectRoot string
+	if findErr == nil {
+		projectRoot = filepath.Dir(projectToml)
+	} else {
+		// no fig.toml — use cwd
+		cwd, _ := os.Getwd()
+		projectRoot = cwd
+	}
+
+	files, err := discoverTestFiles(projectRoot, patterns)
+	if err != nil {
+		fmt.Fprintf(errOut, "error discovering test files: %v\n", err)
+		return err
+	}
+
+	if len(files) == 0 {
+		fmt.Fprintln(out, "no test files found")
+		return nil
+	}
+
+	totalPassed := 0
+	totalFailed := 0
+	totalSkipped := 0
+	anyFailed := false
+
+	for _, file := range files {
+		rel, _ := filepath.Rel(projectRoot, file)
+		if rel == "" {
+			rel = file
+		}
+
+		// Reset figtest state per file
+		builtins.ResetFigtest()
+
+		data, readErr := os.ReadFile(file)
+		if readErr != nil {
+			fmt.Fprintf(errOut, "cannot read %s: %v\n", file, readErr)
+			anyFailed = true
+			continue
+		}
+
+		absPath, _ := filepath.Abs(file)
+		env := environment.NewEnv(nil)
+
+		// Execute the test file in isolation
+		runErr := interpreter.Run(string(data), absPath, env, io.Discard, errOut)
+
+		state := builtins.GetFigtestState()
+		passed := state.Passed()
+		failed := state.Failed()
+		skipped := state.Skipped()
+
+		totalPassed += passed
+		totalFailed += failed
+		totalSkipped += skipped
+
+		if failed > 0 || runErr != nil {
+			anyFailed = true
+		}
+
+		// Print per-file results
+		fmt.Fprintf(out, "\n%s\n", rel)
+		for _, line := range state.Output() {
+			fmt.Fprintln(out, line)
+		}
+
+		if runErr != nil && failed == 0 {
+			// runtime error outside of a test
+			fmt.Fprintf(out, "  ✗ runtime error: %v\n", runErr)
+		}
+	}
+
+	// Final summary
+	fmt.Fprintln(out)
+	total := totalPassed + totalFailed + totalSkipped
+	if totalFailed > 0 {
+		fmt.Fprintf(out, "\x1b[1;31m%d passed, %d failed", totalPassed, totalFailed)
+	} else {
+		fmt.Fprintf(out, "\x1b[1;32m%d passed, %d failed", totalPassed, totalFailed)
+	}
+	if totalSkipped > 0 {
+		fmt.Fprintf(out, ", %d skipped", totalSkipped)
+	}
+	fmt.Fprintf(out, " (total: %d)\x1b[0m\n", total)
+
+	if verbose {
+		fmt.Fprintln(out)
+		fmt.Fprintf(out, "Ran %d file(s)\n", len(files))
+	}
+
+	if anyFailed {
+		return fmt.Errorf("tests failed")
+	}
+	return nil
+}
+
+// discoverTestFiles finds .fig test files from patterns or default locations.
+func discoverTestFiles(projectRoot string, patterns []string) ([]string, error) {
+	if len(patterns) > 0 {
+		var files []string
+		for _, pat := range patterns {
+			// If pattern is absolute, use as-is; otherwise relative to projectRoot
+			if !filepath.IsAbs(pat) {
+				pat = filepath.Join(projectRoot, pat)
+			}
+			matches, err := filepath.Glob(pat)
+			if err != nil {
+				return nil, fmt.Errorf("invalid pattern %q: %v", pat, err)
+			}
+			files = append(files, matches...)
+		}
+		return files, nil
+	}
+
+	// Default discovery: tests/*.fig + **/*_test.fig
+	var files []string
+
+	// 1) tests/ directory
+	testsDir := filepath.Join(projectRoot, "tests")
+	if info, err := os.Stat(testsDir); err == nil && info.IsDir() {
+		matches, _ := filepath.Glob(filepath.Join(testsDir, "*.fig"))
+		files = append(files, matches...)
+	}
+
+	// 2) *_test.fig recursively
+	filepath.Walk(projectRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			base := info.Name()
+			if base == "_modules" || base == ".git" || base == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(info.Name(), "_test.fig") {
+			// avoid duplicates from tests/ dir
+			for _, f := range files {
+				if f == path {
+					return nil
+				}
+			}
+			files = append(files, path)
+		}
+		return nil
+	})
+
+	return files, nil
 }
 
 type figTomlConfig struct {
