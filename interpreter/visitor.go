@@ -1331,44 +1331,71 @@ func (v *FigVisitor) VisitMatchExpr(ctx *parser.MatchExprContext) interface{} {
 		return environment.NewNil()
 	}
 
-	// Evaluate the subject expression
+	// Evaluate and record pattern values up-front to enforce rules:
+	// - no duplicate pattern values
+	// - there must be a wildcard '_' arm
+	arms := ctx.AllMatchArm()
+	seenValues := []environment.Value{}
+	perArmPatterns := make([][]environment.Value, len(arms))
+	wildcardFound := false
+
+	for ai, arm := range arms {
+		armCtx := arm.(*parser.MatchArmCaseContext)
+		patternCtx := armCtx.MatchPattern().(*parser.MatchPatternContext)
+		exprs := patternCtx.AllExpr()
+
+		// detect wildcard usage
+		if len(exprs) == 1 && exprs[0].GetText() == "_" {
+			perArmPatterns[ai] = []environment.Value{}
+			wildcardFound = true
+			continue
+		}
+		// wildcard used with other patterns is invalid
+		for _, p := range exprs {
+			if p.GetText() == "_" {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "wildcard '_' must be alone in its arm", 1)
+				return environment.NewNil()
+			}
+		}
+
+		// evaluate pattern expressions (one or more)
+		var pats []environment.Value
+		for _, p := range exprs {
+			pv := v.VisitExpr(p.(*parser.ExprContext)).(environment.Value)
+			if v.RuntimeErr != nil {
+				return environment.NewNil()
+			}
+			// check duplicate against all previously seen values
+			for _, sv := range seenValues {
+				if valuesEqual(sv, pv) {
+					v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "duplicate pattern value in match", 1)
+					return environment.NewNil()
+				}
+			}
+			seenValues = append(seenValues, pv)
+			pats = append(pats, pv)
+		}
+		perArmPatterns[ai] = pats
+	}
+
+	if !wildcardFound {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "match expression requires a default '_' arm", 1)
+		return environment.NewNil()
+	}
+
+	// Evaluate the subject expression now and perform matching using evaluated patterns
 	subject := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
 	if v.RuntimeErr != nil {
 		return environment.NewNil()
 	}
 
-	// Iterate through match arms
-	for _, arm := range ctx.AllMatchArm() {
+	for ai, arm := range arms {
 		armCtx := arm.(*parser.MatchArmCaseContext)
+		// wildcard arm
 		patternCtx := armCtx.MatchPattern().(*parser.MatchPatternContext)
 		exprs := patternCtx.AllExpr()
-
-		// Check if this is the wildcard arm ( _ )
-		isWildcard := false
-		if len(exprs) == 1 {
-			text := exprs[0].GetText()
-			if text == "_" {
-				isWildcard = true
-			}
-		}
-
-		matched := isWildcard
-		if !isWildcard {
-			// Evaluate each pattern expression and compare with the subject
-			for _, patExpr := range exprs {
-				patVal := v.VisitExpr(patExpr.(*parser.ExprContext)).(environment.Value)
-				if v.RuntimeErr != nil {
-					return environment.NewNil()
-				}
-				if valuesEqual(subject, patVal) {
-					matched = true
-					break
-				}
-			}
-		}
-
-		if matched {
-			// Execute the body: either a block or an inline expression
+		if len(exprs) == 1 && exprs[0].GetText() == "_" {
+			// execute wildcard body
 			if armCtx.Block() != nil {
 				v.pushEnv()
 				result := v.visitBlockRaw(armCtx.Block().(*parser.BlockContext))
@@ -1384,12 +1411,32 @@ func (v *FigVisitor) VisitMatchExpr(ctx *parser.MatchExprContext) interface{} {
 
 				return environment.NewNil()
 			}
-			// Inline expression (match arm without block)
 			return v.VisitExpr(armCtx.Expr().(*parser.ExprContext)).(environment.Value)
+		}
+
+		// compare against pre-evaluated patterns
+		for _, pv := range perArmPatterns[ai] {
+			if valuesEqual(subject, pv) {
+				if armCtx.Block() != nil {
+					v.pushEnv()
+					result := v.visitBlockRaw(armCtx.Block().(*parser.BlockContext))
+					v.popEnv()
+
+					if ret, ok := result.(returnSignal); ok {
+						return ret.value
+					}
+					if sig, ok := result.(loopSignal); ok {
+						v.pendingLoopSignal = sig
+						return environment.NewNil()
+					}
+
+					return environment.NewNil()
+				}
+				return v.VisitExpr(armCtx.Expr().(*parser.ExprContext)).(environment.Value)
+			}
 		}
 	}
 
-	// No arm matched — return nil
 	return environment.NewNil()
 }
 

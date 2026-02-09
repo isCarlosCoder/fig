@@ -11,6 +11,7 @@ match x {
 	1 => { print("one") }
 	2 => { print("two") }
 	3 => { print("three") }
+	_ => { }
 }
 `
 	out, err := runFig(t, src)
@@ -68,6 +69,7 @@ let x = 42
 match x {
 	1 => { print("one") }
 	2 => { print("two") }
+	_ => { }
 }
 print("done")
 `
@@ -166,6 +168,7 @@ let flag = true
 let result = match flag {
 	true => "yes"
 	false => "no"
+	_ => "unknown"
 }
 print(result)
 `
@@ -188,6 +191,7 @@ match a + b {
 	4 => { print("four") }
 	5 => { print("five") }
 	6 => { print("six") }
+	_ => { }
 }
 `
 	out, err := runFig(t, src)
@@ -214,6 +218,7 @@ match x {
 		let b = "o"
 		print(a + b)
 	}
+	_ => { }
 }
 `
 	out, err := runFig(t, src)
@@ -317,7 +322,8 @@ func TestMatchFirstArmWins(t *testing.T) {
 let x = 1
 match x {
 	1 => { print("first") }
-	1 => { print("second") }
+	2 => { print("second") }
+	_ => { }
 }
 `
 	out, err := runFig(t, src)
@@ -337,6 +343,7 @@ let x = 99
 let result = match x {
 	1 => "one"
 	2 => "two"
+	_ => null
 }
 print(result)
 `
