@@ -26,7 +26,7 @@ func printHelp(out io.Writer) {
 	fmt.Fprintln(out, "  fig test [pattern]  Run test files (tests/*.fig, *_test.fig)")
 	fmt.Fprintln(out, "  fig init <dir>      Create a new Fig project")
 	fmt.Fprintln(out, "  fig install <mod>   Install a module from GitHub")
-	fmt.Fprintln(out, "  fig remove <mod>    Remove an installed module")
+	fmt.Fprintln(out, "  fig remove <mod>    Remove an installed module (--force to skip dependency check)")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Flags:")
 	fmt.Fprintln(out, "  -h, --help          Show this help")
@@ -93,7 +93,13 @@ func main() {
 				os.Exit(1)
 			}
 			mod := args[i+1]
-			if err := removeModule(mod, os.Stdout, os.Stderr); err != nil {
+			force := false
+			for _, a := range args[i+2:] {
+				if a == "--force" || a == "-f" {
+					force = true
+				}
+			}
+			if err := removeModule(mod, force, os.Stdout, os.Stderr); err != nil {
 				os.Exit(1)
 			}
 			return
@@ -395,7 +401,7 @@ func installModule(mod string, out io.Writer, errOut io.Writer) error {
 	return nil
 }
 
-func removeModule(mod string, out io.Writer, errOut io.Writer) error {
+func removeModule(mod string, force bool, out io.Writer, errOut io.Writer) error {
 	owner, repo, err := parseModuleSpec(mod)
 	if err != nil {
 		fmt.Fprintf(errOut, "invalid module: %v\n", err)
@@ -409,12 +415,28 @@ func removeModule(mod string, out io.Writer, errOut io.Writer) error {
 	}
 	projectRoot := filepath.Dir(projectToml)
 
-	// Remove the module directory from _modules/
 	moduleDir := filepath.Join(projectRoot, "_modules", repo)
 	if _, statErr := os.Stat(moduleDir); os.IsNotExist(statErr) {
 		fmt.Fprintf(errOut, "module not installed: %s\n", repo)
 		return fmt.Errorf("module not installed")
 	}
+
+	// Check if any other installed module depends on the one being removed
+	dependents := findDependents(projectRoot, repo)
+	if len(dependents) > 0 && !force {
+		fmt.Fprintf(errOut, "cannot remove %s/%s: required by other modules:\n", owner, repo)
+		for _, d := range dependents {
+			fmt.Fprintf(errOut, "  - %s\n", d)
+		}
+		fmt.Fprintln(errOut, "\nuse --force to remove anyway")
+		return fmt.Errorf("module is a dependency of other modules")
+	}
+
+	if len(dependents) > 0 && force {
+		fmt.Fprintf(out, "warning: %s/%s is required by: %s (forced removal)\n", owner, repo, strings.Join(dependents, ", "))
+	}
+
+	// Remove the module directory
 	if err := os.RemoveAll(moduleDir); err != nil {
 		fmt.Fprintf(errOut, "cannot remove module directory: %v\n", err)
 		return err
@@ -427,7 +449,6 @@ func removeModule(mod string, out io.Writer, errOut io.Writer) error {
 		return err
 	}
 
-	// Find and remove the dependency entry matching this module
 	found := false
 	if projCfg.Deps != nil {
 		source := fmt.Sprintf("github.com/%s/%s", owner, repo)
@@ -456,6 +477,41 @@ func removeModule(mod string, out io.Writer, errOut io.Writer) error {
 
 	fmt.Fprintf(out, "Removed %s/%s\n", owner, repo)
 	return nil
+}
+
+// findDependents scans all installed modules' fig.toml to find which ones
+// depend on the given repo name.
+func findDependents(projectRoot, repo string) []string {
+	modulesDir := filepath.Join(projectRoot, "_modules")
+	entries, err := os.ReadDir(modulesDir)
+	if err != nil {
+		return nil
+	}
+
+	var dependents []string
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == repo {
+			continue
+		}
+		modToml := filepath.Join(modulesDir, entry.Name(), "fig.toml")
+		data, err := os.ReadFile(modToml)
+		if err != nil {
+			continue
+		}
+		// Parse as project config to check dependencies
+		var cfg figTomlConfig
+		if err := toml.Unmarshal(data, &cfg); err != nil {
+			continue
+		}
+		for name, dep := range cfg.Deps {
+			// Match by dependency name or by location containing the repo
+			if name == repo || strings.HasSuffix(dep.Location, "/"+repo) || strings.Contains(dep.Source, "/"+repo) {
+				dependents = append(dependents, entry.Name())
+				break
+			}
+		}
+	}
+	return dependents
 }
 
 func parseModuleSpec(spec string) (string, string, error) {
