@@ -224,7 +224,7 @@ func (v *FigVisitor) VisitUseStmt(ctx *parser.UseStmtContext) interface{} {
 		builtins.FigCaller = func(fn environment.Value, args []environment.Value) error {
 			savedErr := v.RuntimeErr
 			v.RuntimeErr = nil
-			v.callFunction(0, 0, fn, args)
+			v.callFunction(0, 0, fn, args, "")
 			handlerErr := v.RuntimeErr
 			v.RuntimeErr = savedErr
 			return handlerErr
@@ -237,7 +237,7 @@ func (v *FigVisitor) VisitUseStmt(ctx *parser.UseStmtContext) interface{} {
 		builtins.FnCaller = func(fn environment.Value, args []environment.Value) (environment.Value, error) {
 			savedErr := v.RuntimeErr
 			v.RuntimeErr = nil
-			result := v.callFunction(0, 0, fn, args)
+			result := v.callFunction(0, 0, fn, args, "")
 			if v.RuntimeErr != nil {
 				err := v.RuntimeErr
 				v.RuntimeErr = savedErr
@@ -260,7 +260,7 @@ func (v *FigVisitor) VisitUseStmt(ctx *parser.UseStmtContext) interface{} {
 		builtins.FigtestCaller = func(fn environment.Value, args []environment.Value) (environment.Value, error) {
 			savedErr := v.RuntimeErr
 			v.RuntimeErr = nil
-			result := v.callFunction(0, 0, fn, args)
+			result := v.callFunction(0, 0, fn, args, "")
 			if v.RuntimeErr != nil {
 				err := v.RuntimeErr
 				v.RuntimeErr = savedErr
@@ -286,7 +286,7 @@ func (v *FigVisitor) VisitUseStmt(ctx *parser.UseStmtContext) interface{} {
 		builtins.TaskSpawner = func(fn environment.Value, resultCh chan<- builtins.TaskResult) {
 			go func() {
 				newV := NewFigVisitor(environment.NewEnv(nil), sw)
-				result := newV.callFunction(0, 0, fn, nil)
+				result := newV.callFunction(0, 0, fn, nil, "")
 				if newV.RuntimeErr != nil {
 					if re, ok := newV.RuntimeErr.(*RuntimeError); ok {
 						resultCh <- builtins.TaskResult{Err: fmt.Errorf("%s", re.Message)}
@@ -1183,7 +1183,7 @@ func (v *FigVisitor) VisitPrimary(ctx *parser.PrimaryContext) interface{} {
 				return v.instantiateStruct(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), fnVal.Struct, args)
 			}
 
-			return v.callFunction(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), fnVal, args).(environment.Value)
+			return v.callFunction(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), fnVal, args, name).(environment.Value)
 		}
 
 		// ── postfix ++/-- ──
@@ -1348,7 +1348,7 @@ func (v *FigVisitor) callMethod(line, col int, receiver environment.Value, fnVal
 }
 
 // callFunction evaluates a function call using a resolved Value and arguments.
-func (v *FigVisitor) callFunction(line, col int, fnVal environment.Value, args []environment.Value) interface{} {
+func (v *FigVisitor) callFunction(line, col int, fnVal environment.Value, args []environment.Value, callee string) interface{} {
 	// Handle builtin functions
 	if fnVal.Type == environment.BuiltinFnType {
 		if fnVal.Builtin == nil {
@@ -1368,7 +1368,17 @@ func (v *FigVisitor) callFunction(line, col int, fnVal environment.Value, args [
 		name = fnVal.Func.Name
 	}
 	if fnVal.Type != environment.FunctionType || fnVal.Func == nil {
-		v.RuntimeErr = v.makeRuntimeError(line, col, fmt.Sprintf("'%s' is not a function", name), len(name))
+		// Prefer the provided callee description when available (e.g., property name)
+		if callee != "" {
+			v.RuntimeErr = v.makeRuntimeError(line, col, fmt.Sprintf("'%s' is not a function", callee), len(callee))
+			return environment.NewNil()
+		}
+		// If we have an identifier name use it; otherwise show the value type
+		if name != "<anonymous>" {
+			v.RuntimeErr = v.makeRuntimeError(line, col, fmt.Sprintf("'%s' is not a function", name), len(name))
+			return environment.NewNil()
+		}
+		v.RuntimeErr = v.makeRuntimeError(line, col, fmt.Sprintf("%s is not a function", fnVal.TypeName()), len(fnVal.TypeName()))
 		return environment.NewNil()
 	}
 	fd := fnVal.Func
@@ -1430,6 +1440,9 @@ func (v *FigVisitor) VisitPostfix(ctx *parser.PostfixContext) interface{} {
 
 	// receiver tracks the instance when DOT accesses a method, so LPAREN can bind "this"
 	var receiver *environment.Value
+	// lastKey stores the most recent property/index accessed so we can produce
+	// better error messages when a subsequent LPAREN tries to call a non-function
+	lastKey := ""
 
 	// iterate through suffix children: LBRACKET/DOT/LPAREN
 	children := ctx.GetChildren()
@@ -1462,6 +1475,8 @@ func (v *FigVisitor) VisitPostfix(ctx *parser.PostfixContext) interface{} {
 			i++ // skip .
 			idNode := children[i].(antlr.TerminalNode)
 			key := idNode.GetText()
+			// remember lastKey for error messages
+			lastKey = key
 			// track receiver for method calls on instances
 			if val.Type == environment.InstanceType {
 				recv := val
@@ -1503,7 +1518,14 @@ func (v *FigVisitor) VisitPostfix(ctx *parser.PostfixContext) interface{} {
 				}
 			} else {
 				receiver = nil
-				val = v.callFunction(tok.GetLine(), tok.GetColumn(), val, args).(environment.Value)
+				// determine helpful callee description for error messages
+				callee := ""
+				if lastKey != "" {
+					callee = fmt.Sprintf("%s", lastKey)
+				}
+				val = v.callFunction(tok.GetLine(), tok.GetColumn(), val, args, callee).(environment.Value)
+				// reset lastKey after the call
+				lastKey = ""
 				if v.RuntimeErr != nil {
 					return environment.NewNil()
 				}
@@ -2044,21 +2066,23 @@ func (v *FigVisitor) VisitForRange(ctx *parser.ForRangeContext) interface{} {
 		step = -1.0
 	}
 
-	v.pushEnv()
-	defer v.popEnv()
-
-	if err := v.env.Define(varName, environment.NewNumber(start)); err != nil {
-		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(varName))
-		return nil
-	}
-
 	v.loopDepth++
 	defer func() { v.loopDepth-- }()
 
 	for i := start; (step > 0 && i < end) || (step < 0 && i > end); i += step {
-		v.env.Assign(varName, environment.NewNumber(i))
+		// create a fresh scope for this iteration so closures capture the
+		// current value of the loop variable (capture-by-value semantics)
+		v.pushEnv()
+		if err := v.env.Define(varName, environment.NewNumber(i)); err != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(varName))
+			v.popEnv()
+			return nil
+		}
 
 		res := v.VisitBlock(ctx.Block().(*parser.BlockContext))
+		// always pop the per-iteration env before handling results
+		v.popEnv()
+
 		if v.RuntimeErr != nil {
 			return nil
 		}
@@ -2097,26 +2121,27 @@ func (v *FigVisitor) VisitForEnumerate(ctx *parser.ForEnumerateContext) interfac
 
 	arr := *iterVal.Arr
 
-	v.pushEnv()
-	defer v.popEnv()
-
-	if err := v.env.Define(idxName, environment.NewNumber(0)); err != nil {
-		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(idxName))
-		return nil
-	}
-	if err := v.env.Define(valName, environment.NewNil()); err != nil {
-		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(valName))
-		return nil
-	}
-
 	v.loopDepth++
 	defer func() { v.loopDepth-- }()
 
 	for i, elem := range arr {
-		v.env.Assign(idxName, environment.NewNumber(float64(i)))
-		v.env.Assign(valName, elem)
+		// per-iteration scope so closures capture current idx/val
+		v.pushEnv()
+		if err := v.env.Define(idxName, environment.NewNumber(float64(i))); err != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(idxName))
+			v.popEnv()
+			return nil
+		}
+		if err := v.env.Define(valName, elem); err != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(valName))
+			v.popEnv()
+			return nil
+		}
 
 		res := v.VisitBlock(ctx.Block().(*parser.BlockContext))
+		// pop per-iteration scope before result handling
+		v.popEnv()
+
 		if v.RuntimeErr != nil {
 			return nil
 		}
@@ -2154,21 +2179,21 @@ func (v *FigVisitor) VisitForIn(ctx *parser.ForInContext) interface{} {
 
 	arr := *iterVal.Arr
 
-	v.pushEnv()
-	defer v.popEnv()
-
-	if err := v.env.Define(varName, environment.NewNil()); err != nil {
-		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(varName))
-		return nil
-	}
-
 	v.loopDepth++
 	defer func() { v.loopDepth-- }()
 
 	for _, elem := range arr {
-		v.env.Assign(varName, elem)
+		// per-iteration env so closures capture the current element
+		v.pushEnv()
+		if err := v.env.Define(varName, elem); err != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(varName))
+			v.popEnv()
+			return nil
+		}
 
 		res := v.VisitBlock(ctx.Block().(*parser.BlockContext))
+		v.popEnv()
+
 		if v.RuntimeErr != nil {
 			return nil
 		}
