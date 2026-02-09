@@ -17,6 +17,11 @@ type PrettyErrorListener struct {
 	out      io.Writer
 	Occurred bool
 	Err      error
+	// AbortOnError if true will cause the listener to panic after reporting
+	// the first syntax error. Callers that want parsing to stop immediately
+	// (e.g., interactive runs) should set this to true; tests should leave
+	// it false to avoid panics.
+	AbortOnError bool
 }
 
 // ANSI color codes
@@ -37,6 +42,25 @@ func NewPrettyErrorListener(source string, filename string, out io.Writer) *Pret
 
 // SyntaxError is called by ANTLR when a syntax error occurs.
 func (l *PrettyErrorListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol interface{}, line, column int, msg string, e antlr.RecognitionException) {
+	// Attempt to produce a friendlier message for common ANTLR outputs
+	// e.g., "mismatched input '/' expecting {...}" -> "unexpected token '/'"
+	tokText := ""
+	switch t := offendingSymbol.(type) {
+	case antlr.Token:
+		tokText = t.GetText()
+	case antlr.Tree:
+		// nothing
+	default:
+		_ = t
+	}
+	if strings.HasPrefix(msg, "mismatched input") {
+		if tokText != "" {
+			msg = fmt.Sprintf("unexpected token %q", tokText)
+		} else {
+			msg = "syntax error"
+		}
+	}
+
 	// Header: file:line:col: error: message
 	fmt.Fprintf(l.out, "%s:%d:%d: %serror: %s%s\n", l.filename, line, column, ansiRed, msg, ansiReset)
 	l.Occurred = true
@@ -45,17 +69,6 @@ func (l *PrettyErrorListener) SyntaxError(recognizer antlr.Recognizer, offending
 	// Get the source line if available (ANTLR lines are 1-based)
 	if line-1 >= 0 && line-1 < len(l.srcLines) {
 		srcLine := l.srcLines[line-1]
-
-		// Determine offending token text if possible
-		tokText := ""
-		switch t := offendingSymbol.(type) {
-		case antlr.Token:
-			tokText = t.GetText()
-		case antlr.Tree:
-			// nothing
-		default:
-			_ = t
-		}
 
 		start := column
 		if start < 0 {
@@ -119,6 +132,11 @@ func (l *PrettyErrorListener) SyntaxError(recognizer antlr.Recognizer, offending
 		}
 		fmt.Fprint(l.out, ansiReset)
 		fmt.Fprint(l.out, "\n")
+	}
+
+	// Abort parsing early if requested by the caller
+	if l.AbortOnError {
+		panic(l.Err)
 	}
 }
 

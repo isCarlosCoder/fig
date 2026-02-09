@@ -37,10 +37,27 @@ func Run(source, filename string, global *environment.Env, out io.Writer, errOut
 	// Attach pretty error listener to errOut (avoid mixing errors with program stdout)
 	p.RemoveErrorListeners()
 	listener := NewPrettyErrorListener(source, filename, errOut)
+	listener.AbortOnError = true // stop parsing on first error for runs
+	lex.RemoveErrorListeners()
+	lex.AddErrorListener(listener)
 	p.AddErrorListener(listener)
 
-	// Parse
-	tree := p.Program()
+	// Parse — abort early on first error from the pretty listener
+	var tree antlr.ParseTree
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// If the pretty listener caused the panic, surface its error
+				if _, ok := r.(error); ok && listener != nil && listener.Occurred {
+					// swallow the panic and return via listener.Err
+					return
+				}
+				// otherwise re-panic
+				panic(r)
+			}
+		}()
+		tree = p.Program()
+	}()
 	if listener.Occurred {
 		return listener.Err
 	}

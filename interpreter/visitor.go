@@ -429,12 +429,27 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 	ts := antlr.NewCommonTokenStream(lex, antlr.TokenDefaultChannel)
 	p := parser.NewFigParser(ts)
 
-	// Capture parse errors
+	// Capture parse/lex errors. Attach listener to both lexer and parser and
+	// abort parsing on the first reported error.
+	lex.RemoveErrorListeners()
 	p.RemoveErrorListeners()
 	listener := NewPrettyErrorListener(source, absPath, v.out)
+	listener.AbortOnError = true
+	lex.AddErrorListener(listener)
 	p.AddErrorListener(listener)
 
-	tree := p.Program()
+	var tree antlr.ParseTree
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if _, ok := r.(error); ok && listener != nil && listener.Occurred {
+					return
+				}
+				panic(r)
+			}
+		}()
+		tree = p.Program()
+	}()
 	if listener.Occurred {
 		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
 			fmt.Sprintf("parse error in import \"%s\"", modPath), len(raw))
@@ -532,11 +547,26 @@ func (v *FigVisitor) importModule(modPath, alias string, ctx *parser.ImportStmtC
 	ts := antlr.NewCommonTokenStream(lex, antlr.TokenDefaultChannel)
 	p := parser.NewFigParser(ts)
 
+	// attach listener to lexer and parser and abort early on first error
+	lex.RemoveErrorListeners()
 	p.RemoveErrorListeners()
 	listener := NewPrettyErrorListener(source, absPath, v.out)
+	listener.AbortOnError = true
+	lex.AddErrorListener(listener)
 	p.AddErrorListener(listener)
 
-	tree := p.Program()
+	var tree antlr.ParseTree
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if _, ok := r.(error); ok && listener != nil && listener.Occurred {
+					return
+				}
+				panic(r)
+			}
+		}()
+		tree = p.Program()
+	}()
 	if listener.Occurred {
 		return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
 			fmt.Sprintf("parse error in module \"%s\"", moduleSpec), len(modPath))
