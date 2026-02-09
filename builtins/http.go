@@ -330,10 +330,10 @@ func init() {
 			return environment.NewNil(), nil
 		}),
 
-		// listen(port) → blocks serving HTTP
+		// listen(port [, onStart]) → blocks serving HTTP. Optional `onStart` is a fn() called during initialization.
 		fn("listen", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 1 {
-				return environment.NewNil(), fmt.Errorf("listen() expects 1 argument, got %d", len(args))
+			if len(args) < 1 || len(args) > 2 {
+				return environment.NewNil(), fmt.Errorf("listen() expects 1 or 2 arguments, got %d", len(args))
 			}
 			if args[0].Type != environment.NumberType {
 				return environment.NewNil(), fmt.Errorf("listen() port must be a number")
@@ -345,6 +345,17 @@ func init() {
 			port := int(args[0].Num)
 			addr := fmt.Sprintf(":%d", port)
 
+			// optional onStart callback: must be a function
+			if len(args) == 2 {
+				if args[1].Type != environment.FunctionType {
+					return environment.NewNil(), fmt.Errorf("listen() onStart must be a function")
+				}
+				// call the callback so it can perform initialization (e.g., register routes)
+				if err := FigCaller(args[1], nil); err != nil {
+					return environment.NewNil(), fmt.Errorf("listen() onStart callback error: %v", err)
+				}
+			}
+
 			mux := buildServerMux()
 
 			ln, err := net.Listen("tcp", addr)
@@ -352,7 +363,6 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("listen() error: %v", err)
 			}
 			ServerAddr = ln.Addr().String()
-			fmt.Fprintf(os.Stderr, "Fig server listening on %s\n", ServerAddr)
 
 			httpServer = &http.Server{Handler: mux}
 			err = httpServer.Serve(ln)
