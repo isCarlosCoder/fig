@@ -61,6 +61,30 @@ let argumentos = system.args()
 print(argumentos)
 ```
 
+### system.argv (property)
+
+Quando você executa um script com `fig run <file> [args]`, o CLI injeta os argumentos do script na propriedade `system.argv` como um `array` de strings. Exemplo:
+
+```sh
+fig run myscript.fig a b
+```
+
+No script:
+
+```js
+use "system"
+print(system.argv) // ["a", "b"]
+```
+
+### system.cwd (property)
+
+A propriedade `system.cwd` contém o diretório de trabalho atual (string) no momento da execução do script:
+
+```js
+use "system"
+print(system.cwd) // ex: /home/user/projects
+```
+
 ### system.platform()
 
 Retorna o nome do sistema operacional:

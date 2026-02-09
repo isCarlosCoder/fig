@@ -7,6 +7,13 @@ import (
 	"github.com/iscarloscoder/fig/environment"
 )
 
+// Script runtime state injected by CLI before running a script.
+// These are set by `main.runFile` and read by builtins (e.g., system.argv()/cwd()).
+var (
+	ScriptArgs []string
+	ScriptCwd  string
+)
+
 func init() {
 	register(newModule("runtime",
 		// gc() — forces a garbage collection

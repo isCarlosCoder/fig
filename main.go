@@ -51,17 +51,24 @@ func main() {
 			fmt.Println(Version)
 			return
 		case "run":
-			// run subcommand: optional file argument
+			// run subcommand: optional file argument and optional script args after file
 			var path string
+			var scriptArgs []string
 			if i+1 < len(args) {
 				path = args[i+1]
+				if i+2 < len(args) {
+					scriptArgs = args[i+2:]
+				}
+			} else {
+				// no explicit path: all remaining args are script args
+				scriptArgs = args[i+1:]
 			}
 			resolved, err := resolveRunTarget(path, os.Stderr)
 			if err != nil {
 				os.Exit(1)
 			}
 			path = resolved
-			if err := runFile(path, os.Stdout, os.Stderr); err != nil {
+			if err := runFile(path, scriptArgs, os.Stdout, os.Stderr); err != nil {
 				// Pretty output already printed to stderr by interpreter; exit non-zero
 				os.Exit(1)
 			}
@@ -144,7 +151,8 @@ func main() {
 				if err != nil {
 					os.Exit(1)
 				}
-				if err := runFile(resolved, os.Stdout, os.Stderr); err != nil {
+				scriptArgs := args[i+1:]
+				if err := runFile(resolved, scriptArgs, os.Stdout, os.Stderr); err != nil {
 					os.Exit(1)
 				}
 				return
@@ -158,7 +166,7 @@ func main() {
 	}
 }
 
-func runFile(path string, out io.Writer, errOut io.Writer) error {
+func runFile(path string, scriptArgs []string, out io.Writer, errOut io.Writer) error {
 	// read file
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -168,6 +176,17 @@ func runFile(path string, out io.Writer, errOut io.Writer) error {
 
 	// use filename as provided (but normalize to absolute for import resolution)
 	filename, _ := filepath.Abs(path)
+
+	// Before executing, set global runtime state for script args and cwd
+	prevArgs := builtins.ScriptArgs
+	prevCwd := builtins.ScriptCwd
+	builtins.ScriptArgs = scriptArgs
+	cwd, _ := os.Getwd()
+	builtins.ScriptCwd = cwd
+	defer func() {
+		builtins.ScriptArgs = prevArgs
+		builtins.ScriptCwd = prevCwd
+	}()
 
 	// execute
 	if err := interpreter.Run(string(data), filename, environment.NewEnv(nil), out, errOut); err != nil {

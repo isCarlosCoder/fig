@@ -71,7 +71,7 @@ func init() {
 			panic(environment.ExitSignal{Code: code})
 		}),
 
-		// args() — returns command-line arguments as array
+		// args() — returns command-line arguments as array (OS args)
 		fn("args", func(args []environment.Value) (environment.Value, error) {
 			if len(args) != 0 {
 				return environment.NewNil(), fmt.Errorf("args() expects 0 arguments, got %d", len(args))
@@ -82,6 +82,26 @@ func init() {
 				result[i] = environment.NewString(a)
 			}
 			return environment.NewArray(result), nil
+		}),
+
+		// argv() — script args injected by the CLI when running a script
+		fn("argv", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 0 {
+				return environment.NewNil(), fmt.Errorf("argv() expects 0 arguments, got %d", len(args))
+			}
+			arr := make([]environment.Value, len(ScriptArgs))
+			for i, s := range ScriptArgs {
+				arr[i] = environment.NewString(s)
+			}
+			return environment.NewArray(arr), nil
+		}),
+
+		// cwd() — current working directory when script was executed
+		fn("cwd", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 0 {
+				return environment.NewNil(), fmt.Errorf("cwd() expects 0 arguments, got %d", len(args))
+			}
+			return environment.NewString(ScriptCwd), nil
 		}),
 
 		// platform() — returns the OS name
