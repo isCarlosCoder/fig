@@ -56,6 +56,12 @@ print(lib.hello("Fig"))
 ```
 
 > Para instalar um módulo, use `fig install <owner>/<repo>` no diretório do projeto.
+> Para instalar vários de uma vez: `fig install owner/x owner/y`.
+> Para sincronizar dependências do `fig.toml` (útil após clonar): `fig install` (sem argumentos).
+
+> Para remover um módulo: `fig remove owner/repo`.
+> Para remover vários de uma vez: `fig remove owner/x owner/y`.
+> Se outro módulo depender do que está sendo removido, o comando será bloqueado. Use `--force` para forçar.
 
 > Dependências transitivas são resolvidas no `_modules/` do projeto raiz. Módulos externos não carregam um `_modules` próprio.
 

@@ -25,8 +25,8 @@ func printHelp(out io.Writer) {
 	fmt.Fprintln(out, "  fig run [file]      Run a .fig source file or project main")
 	fmt.Fprintln(out, "  fig test [pattern]  Run test files (tests/*.fig, *_test.fig)")
 	fmt.Fprintln(out, "  fig init <dir>      Create a new Fig project")
-	fmt.Fprintln(out, "  fig install <mod>   Install a module from GitHub")
-	fmt.Fprintln(out, "  fig remove <mod>    Remove an installed module (--force to skip dependency check)")
+	fmt.Fprintln(out, "  fig install [mods]  Install modules (no args = sync from fig.toml)")
+	fmt.Fprintln(out, "  fig remove <mods>   Remove installed modules (--force to skip dependency check)")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Flags:")
 	fmt.Fprintln(out, "  -h, --help          Show this help")
@@ -78,28 +78,46 @@ func main() {
 			}
 			return
 		case "install":
-			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "install requires a module argument")
-				os.Exit(1)
-			}
-			mod := args[i+1]
-			if err := installModule(mod, os.Stdout, os.Stderr); err != nil {
-				os.Exit(1)
+			mods := args[i+1:]
+			if len(mods) == 0 {
+				// No arguments: sync missing dependencies from fig.toml
+				if err := installFromToml(os.Stdout, os.Stderr); err != nil {
+					os.Exit(1)
+				}
+			} else {
+				hasErr := false
+				for _, mod := range mods {
+					if err := installModule(mod, os.Stdout, os.Stderr); err != nil {
+						hasErr = true
+					}
+				}
+				if hasErr {
+					os.Exit(1)
+				}
 			}
 			return
 		case "remove":
-			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "remove requires a module argument (owner/repo)")
-				os.Exit(1)
-			}
-			mod := args[i+1]
+			remaining := args[i+1:]
 			force := false
-			for _, a := range args[i+2:] {
+			var mods []string
+			for _, a := range remaining {
 				if a == "--force" || a == "-f" {
 					force = true
+				} else {
+					mods = append(mods, a)
 				}
 			}
-			if err := removeModule(mod, force, os.Stdout, os.Stderr); err != nil {
+			if len(mods) == 0 {
+				fmt.Fprintln(os.Stderr, "remove requires at least one module argument (owner/repo)")
+				os.Exit(1)
+			}
+			hasErr := false
+			for _, mod := range mods {
+				if err := removeModule(mod, force, os.Stdout, os.Stderr); err != nil {
+					hasErr = true
+				}
+			}
+			if hasErr {
 				os.Exit(1)
 			}
 			return
@@ -315,6 +333,62 @@ func initProject(target string, out io.Writer, errOut io.Writer) error {
 	}
 
 	fmt.Fprintf(out, "Project initialized at %s\n", absPath)
+	return nil
+}
+
+// installFromToml reads fig.toml and installs any dependencies whose
+// directories are missing from _modules/.
+func installFromToml(out io.Writer, errOut io.Writer) error {
+	projectToml, err := findProjectToml()
+	if err != nil {
+		fmt.Fprintln(errOut, "fig.toml not found in current directory")
+		return err
+	}
+	projectRoot := filepath.Dir(projectToml)
+
+	cfg, err := loadProjectToml(projectToml)
+	if err != nil {
+		fmt.Fprintf(errOut, "cannot read fig.toml: %v\n", err)
+		return err
+	}
+
+	if len(cfg.Deps) == 0 {
+		fmt.Fprintln(out, "no dependencies declared in fig.toml")
+		return nil
+	}
+
+	installed := 0
+	hasErr := false
+	for _, dep := range cfg.Deps {
+		// Extract owner/repo from source (e.g. "github.com/owner/repo")
+		parts := strings.Split(dep.Source, "/")
+		if len(parts) < 3 {
+			continue
+		}
+		owner := parts[len(parts)-2]
+		repo := parts[len(parts)-1]
+
+		moduleDir := filepath.Join(projectRoot, "_modules", repo)
+		if _, statErr := os.Stat(moduleDir); statErr == nil {
+			// already installed
+			continue
+		}
+
+		mod := owner + "/" + repo
+		if err := installModule(mod, out, errOut); err != nil {
+			hasErr = true
+			continue
+		}
+		installed++
+	}
+
+	if installed == 0 && !hasErr {
+		fmt.Fprintln(out, "all dependencies already installed")
+	}
+
+	if hasErr {
+		return fmt.Errorf("some dependencies failed to install")
+	}
 	return nil
 }
 

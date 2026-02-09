@@ -44,6 +44,10 @@ fig run programa.fig    # executar arquivo
 fig run                # executar main via fig.toml
 fig init meu-projeto   # criar projeto
 fig install owner/repo # instalar modulo externo
+fig install a/x b/y    # instalar vários de uma vez
+fig install            # sincronizar deps do fig.toml
+fig remove owner/repo  # remover modulo
+fig remove a/x b/y     # remover vários de uma vez
 fig --version           # versão (0.1.0)
 fig --help              # ajuda
 ```
