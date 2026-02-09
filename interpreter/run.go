@@ -65,6 +65,7 @@ func Run(source, filename string, global *environment.Env, out io.Writer, errOut
 	// Execute with visitor; collect runtime errors without crashing
 	v := NewFigVisitorWithSource(global, out, source)
 	v.baseDir = filepath.Dir(filename)
+	v.currentFile = filename
 	if projectToml, err := findProjectTomlFrom(v.baseDir); err == nil {
 		v.projectRoot = filepath.Dir(projectToml)
 	}

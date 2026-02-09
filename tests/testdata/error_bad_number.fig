@@ -1,0 +1,3 @@
+# error file causing arithmetic on string
+let s = "not-a-number"
+let x = s - 1

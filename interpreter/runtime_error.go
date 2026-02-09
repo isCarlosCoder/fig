@@ -7,6 +7,7 @@ import (
 
 // RuntimeError represents an error that occurred during interpretation.
 type RuntimeError struct {
+	File        string // optional file path where the error occurred
 	Line        int
 	Column      int
 	Message     string
@@ -18,6 +19,19 @@ type RuntimeError struct {
 // Error returns a plain-text representation (no ANSI colors) for use in Go error chains.
 func (e *RuntimeError) Error() string {
 	if e.Line > 0 {
+		// include file path when available: file:line:col: runtime error: msg
+		if e.File != "" {
+			base := fmt.Sprintf("%s:%d:%d: runtime error: %s", e.File, e.Line, e.Column, e.Message)
+			if e.Snippet != "" {
+				caret := strings.Repeat(" ", e.ColumnStart)
+				if e.Length <= 0 {
+					e.Length = 1
+				}
+				caret = caret + strings.Repeat("^", e.Length)
+				return fmt.Sprintf("%s\n    %s\n    %s", base, e.Snippet, caret)
+			}
+			return base
+		}
 		base := fmt.Sprintf("%d:%d: runtime error: %s", e.Line, e.Column, e.Message)
 		if e.Snippet != "" {
 			caret := strings.Repeat(" ", e.ColumnStart)
@@ -39,7 +53,11 @@ func (e *RuntimeError) PrettyError() string {
 
 	if e.Line > 0 {
 		// Header: line:col: runtime error: message (with red highlight)
-		sb.WriteString(fmt.Sprintf("%d:%d: %sruntime error: %s%s\n", e.Line, e.Column, ansiRed, e.Message, ansiReset))
+		if e.File != "" {
+			sb.WriteString(fmt.Sprintf("%s:%d:%d: %sruntime error: %s%s\n", e.File, e.Line, e.Column, ansiRed, e.Message, ansiReset))
+		} else {
+			sb.WriteString(fmt.Sprintf("%d:%d: %sruntime error: %s%s\n", e.Line, e.Column, ansiRed, e.Message, ansiReset))
+		}
 		if e.Snippet != "" {
 			length := e.Length
 			if length <= 0 {

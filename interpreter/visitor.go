@@ -44,6 +44,9 @@ type FigVisitor struct {
 	// source lines for creating snippet in runtime errors
 	srcLines []string
 
+	// currentFile holds the filename (absolute or relative) of the currently executing source
+	currentFile string
+
 	// loopDepth indicates how many nested loops we're currently in (to validate break/continue)
 	loopDepth int
 
@@ -104,6 +107,8 @@ func NewFigVisitorWithSource(globalEnv *environment.Env, out io.Writer, source s
 	if source != "" {
 		v.srcLines = strings.Split(source, "\n")
 	}
+	// currentFile will be set by the caller (Run) or by import handling when switching files
+	v.currentFile = ""
 	return v
 }
 
@@ -119,7 +124,7 @@ func (v *FigVisitor) popEnv() {
 
 // makeRuntimeError builds a RuntimeError with snippet information when source is available.
 func (v *FigVisitor) makeRuntimeError(line, column int, msg string, length int) *RuntimeError {
-	r := &RuntimeError{Line: line, Column: column, Message: msg, ColumnStart: column, Length: length}
+	r := &RuntimeError{File: v.currentFile, Line: line, Column: column, Message: msg, ColumnStart: column, Length: length}
 	if v.srcLines != nil && line-1 >= 0 && line-1 < len(v.srcLines) {
 		ln := v.srcLines[line-1]
 		r.Snippet = ln
@@ -461,9 +466,11 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 	prevSrcLines := v.srcLines
 	prevBaseDir := v.baseDir
 	prevEnv := v.env
+	prevCurrentFile := v.currentFile
 
 	v.srcLines = strings.Split(source, "\n")
 	v.baseDir = filepath.Dir(absPath)
+	v.currentFile = absPath
 
 	// Visit all statements from the imported program directly
 	progCtx := tree.(*parser.ProgramContext)
@@ -478,6 +485,7 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 	v.srcLines = prevSrcLines
 	v.baseDir = prevBaseDir
 	v.env = prevEnv
+	v.currentFile = prevCurrentFile
 
 	return nil
 }
@@ -575,11 +583,13 @@ func (v *FigVisitor) importModule(modPath, alias string, ctx *parser.ImportStmtC
 	prevSrcLines := v.srcLines
 	prevBaseDir := v.baseDir
 	prevEnv := v.env
+	prevCurrentFile := v.currentFile
 
 	moduleEnv := environment.NewEnv(v.env)
 	v.env = moduleEnv
 	v.srcLines = strings.Split(source, "\n")
 	v.baseDir = filepath.Dir(absPath)
+	v.currentFile = absPath
 
 	progCtx := tree.(*parser.ProgramContext)
 	for _, st := range progCtx.AllStatements() {
@@ -592,6 +602,7 @@ func (v *FigVisitor) importModule(modPath, alias string, ctx *parser.ImportStmtC
 	v.srcLines = prevSrcLines
 	v.baseDir = prevBaseDir
 	v.env = prevEnv
+	v.currentFile = prevCurrentFile
 
 	if v.RuntimeErr != nil {
 		return v.RuntimeErr
