@@ -8,7 +8,6 @@ import (
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/iscarloscoder/fig/environment"
 	"github.com/iscarloscoder/fig/parser"
-
 )
 
 // Run parses and executes `source`.

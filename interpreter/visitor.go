@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unsafe"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/iscarloscoder/fig/builtins"
@@ -2276,7 +2277,15 @@ func (v *FigVisitor) VisitIfStmt(ctx *parser.IfStmtContext) interface{} {
 }
 
 // valuesEqual compares two Values for equality by type and content.
+// It is cycle-safe: when comparing container types (arrays/objects),
+// it tracks pointer pairs already being compared to avoid infinite recursion
+// on self-referential structures.
 func valuesEqual(a, b environment.Value) bool {
+	seen := make(map[[2]uintptr]bool)
+	return valuesEqualSeen(a, b, seen)
+}
+
+func valuesEqualSeen(a, b environment.Value, seen map[[2]uintptr]bool) bool {
 	if a.Type != b.Type {
 		return false
 	}
@@ -2298,12 +2307,20 @@ func valuesEqual(a, b environment.Value) bool {
 		if a.Arr == nil || b.Arr == nil {
 			return false
 		}
+		// detect cycles using pointer identity of the underlying slice
+		pa := uintptr(unsafe.Pointer(a.Arr))
+		pb := uintptr(unsafe.Pointer(b.Arr))
+		key := [2]uintptr{pa, pb}
+		if seen[key] {
+			return true
+		}
+		seen[key] = true
 		aa, bb := *a.Arr, *b.Arr
 		if len(aa) != len(bb) {
 			return false
 		}
 		for i := range aa {
-			if !valuesEqual(aa[i], bb[i]) {
+			if !valuesEqualSeen(aa[i], bb[i], seen) {
 				return false
 			}
 		}
@@ -2315,12 +2332,19 @@ func valuesEqual(a, b environment.Value) bool {
 		if a.Obj == nil || b.Obj == nil {
 			return false
 		}
+		pa := uintptr(unsafe.Pointer(a.Obj))
+		pb := uintptr(unsafe.Pointer(b.Obj))
+		key := [2]uintptr{pa, pb}
+		if seen[key] {
+			return true
+		}
+		seen[key] = true
 		if len(a.Obj.Entries) != len(b.Obj.Entries) {
 			return false
 		}
 		for k, va := range a.Obj.Entries {
 			vb, ok := b.Obj.Entries[k]
-			if !ok || !valuesEqual(va, vb) {
+			if !ok || !valuesEqualSeen(va, vb, seen) {
 				return false
 			}
 		}
