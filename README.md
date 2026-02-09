@@ -52,6 +52,58 @@ fig --version           # versão (0.1.0)
 fig --help              # ajuda
 ```
 
+## Convenções de Estilo
+
+Recomendações para manter o código Fig organizado e consistente:
+
+### Ordem do arquivo
+
+Sempre declare importações no topo do arquivo, seguidas de `use`, e depois o código:
+
+```js
+# 1. imports de arquivos e módulos externos
+import "utils/helpers.fig"
+import "mod:isCarlosCoder/logger" log
+
+# 2. módulos embutidos
+use "arrays"
+use "strings"
+
+# 3. código
+let dados = [3, 1, 2]
+arrays.sort(dados)
+```
+
+### Organização de projeto
+
+- Um arquivo por função ou struct — evite arquivos com muitas responsabilidades
+- Agrupe arquivos relacionados em pastas (`utils/`, `models/`, `handlers/`)
+- Use `src/main.fig` como ponto de entrada e importe o restante
+
+```
+meu-projeto/
+├── src/
+│   ├── main.fig
+│   ├── models/
+│   │   ├── usuario.fig
+│   │   └── produto.fig
+│   ├── utils/
+│   │   ├── validacao.fig
+│   │   └── formatacao.fig
+│   └── handlers/
+│       └── api.fig
+├── tests/
+│    └── validacao_test.fig
+└── fig.toml
+```
+
+### Boas práticas
+
+- Nomes de variáveis e funções em **camelCase**: `minhaVariavel`, `calcularTotal()`
+- Nomes de structs em **PascalCase**: `Usuario`, `ItemPedido`
+- Comentários com `#` — prefira explicar o *porquê*, não o *quê*
+- Ponto e vírgula é opcional — omita para código mais limpo
+
 ## Características
 
 - Tipagem dinâmica com 6 tipos primitivos (number, string, boolean, null, array, object)
