@@ -61,6 +61,7 @@ Hello, World!
 | `fig run`             | Executa o `main` do projeto via `fig.toml`  |
 | `fig <arquivo>`       | Executa um arquivo `.fig` diretamente       |
 | `fig init <dir>`      | Cria um projeto Fig com estrutura padrão    |
+| `fig install <mod>`   | Instala um módulo externo no projeto        |
 | `fig --help` ou `fig -h`  | Mostra a ajuda                          |
 | `fig --version` ou `fig -v` | Mostra a versão (ex: `0.1.0`)       |
 

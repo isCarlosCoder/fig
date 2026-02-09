@@ -1,10 +1,13 @@
 package main
 
 import (
+	"archive/zip"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/iscarloscoder/fig/environment"
 	"github.com/iscarloscoder/fig/interpreter"
@@ -20,6 +23,7 @@ func printHelp(out io.Writer) {
 	fmt.Fprintln(out, "  fig <file>       Run a .fig source file")
 	fmt.Fprintln(out, "  fig run [file]   Run a .fig source file or project main")
 	fmt.Fprintln(out, "  fig init <dir>   Create a new Fig project")
+	fmt.Fprintln(out, "  fig install <mod> Install a module from GitHub")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Flags:")
 	fmt.Fprintln(out, "  -h, --help       Show this help")
@@ -67,6 +71,16 @@ func main() {
 			}
 			target := args[i+1]
 			if err := initProject(target, os.Stdout, os.Stderr); err != nil {
+				os.Exit(1)
+			}
+			return
+		case "install":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "install requires a module argument")
+				os.Exit(1)
+			}
+			mod := args[i+1]
+			if err := installModule(mod, os.Stdout, os.Stderr); err != nil {
 				os.Exit(1)
 			}
 			return
@@ -151,6 +165,18 @@ func findProjectToml() (string, error) {
 
 func loadProjectToml(path string) (figTomlConfig, error) {
 	var cfg figTomlConfig
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return cfg, err
+	}
+	if err := toml.Unmarshal(data, &cfg); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
+}
+
+func loadModuleToml(path string) (moduleTomlConfig, error) {
+	var cfg moduleTomlConfig
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return cfg, err
@@ -257,6 +283,172 @@ func initProject(target string, out io.Writer, errOut io.Writer) error {
 	return nil
 }
 
+func installModule(mod string, out io.Writer, errOut io.Writer) error {
+	owner, repo, err := parseModuleSpec(mod)
+	if err != nil {
+		fmt.Fprintf(errOut, "invalid module: %v\n", err)
+		return err
+	}
+
+	projectToml, err := findProjectToml()
+	if err != nil {
+		fmt.Fprintln(errOut, "fig.toml not found in current directory")
+		return err
+	}
+	projectRoot := filepath.Dir(projectToml)
+
+	modulesDir := filepath.Join(projectRoot, "_modules")
+	if err := os.MkdirAll(modulesDir, 0755); err != nil {
+		fmt.Fprintf(errOut, "cannot create _modules: %v\n", err)
+		return err
+	}
+
+	moduleDir := filepath.Join(modulesDir, repo)
+	if _, err := os.Stat(moduleDir); err == nil {
+		fmt.Fprintf(errOut, "module already installed: %s\n", repo)
+		return fmt.Errorf("module already installed")
+	} else if !os.IsNotExist(err) {
+		fmt.Fprintf(errOut, "cannot access module directory: %v\n", err)
+		return err
+	}
+
+	zipURL := fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/main.zip", owner, repo)
+	tmpZip, err := downloadZip(zipURL)
+	if err != nil {
+		fmt.Fprintf(errOut, "cannot download module: %v\n", err)
+		return err
+	}
+	defer os.Remove(tmpZip)
+
+	if err := extractZip(tmpZip, moduleDir); err != nil {
+		fmt.Fprintf(errOut, "cannot extract module: %v\n", err)
+		return err
+	}
+
+	moduleTomlPath := filepath.Join(moduleDir, "fig.toml")
+	modCfg, err := loadModuleToml(moduleTomlPath)
+	if err != nil {
+		fmt.Fprintf(errOut, "module fig.toml missing or invalid: %v\n", err)
+		return err
+	}
+
+	depName := modCfg.Project.Name
+	if depName == "" {
+		depName = repo
+	}
+	depVersion := modCfg.Project.Version
+
+	projCfg, err := loadProjectToml(projectToml)
+	if err != nil {
+		fmt.Fprintf(errOut, "cannot read fig.toml: %v\n", err)
+		return err
+	}
+	if projCfg.Deps == nil {
+		projCfg.Deps = map[string]figDependencyConfig{}
+	}
+	projCfg.Deps[depName] = figDependencyConfig{
+		Version:  depVersion,
+		Source:   fmt.Sprintf("github.com/%s/%s", owner, repo),
+		Location: filepath.ToSlash(filepath.Join("_modules", repo)),
+	}
+
+	encoded, err := toml.Marshal(projCfg)
+	if err != nil {
+		fmt.Fprintf(errOut, "cannot write fig.toml: %v\n", err)
+		return err
+	}
+	if err := os.WriteFile(projectToml, encoded, 0644); err != nil {
+		fmt.Fprintf(errOut, "cannot write fig.toml: %v\n", err)
+		return err
+	}
+
+	fmt.Fprintf(out, "Installed %s/%s (%s)\n", owner, repo, depVersion)
+	return nil
+}
+
+func parseModuleSpec(spec string) (string, string, error) {
+	parts := strings.Split(spec, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("expected <owner>/<repo>")
+	}
+	return parts[0], parts[1], nil
+}
+
+func downloadZip(url string) (string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("bad status: %s", resp.Status)
+	}
+	tmp, err := os.CreateTemp("", "fig-mod-*.zip")
+	if err != nil {
+		return "", err
+	}
+	defer tmp.Close()
+	if _, err := io.Copy(tmp, resp.Body); err != nil {
+		return "", err
+	}
+	return tmp.Name(), nil
+}
+
+func extractZip(zipPath, destDir string) error {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+
+	for _, f := range r.File {
+		parts := strings.SplitN(f.Name, "/", 2)
+		if len(parts) < 2 {
+			continue
+		}
+		rel := parts[1]
+		if rel == "" {
+			continue
+		}
+		target := filepath.Join(destDir, rel)
+		cleanTarget := filepath.Clean(target)
+		if !strings.HasPrefix(cleanTarget, filepath.Clean(destDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("invalid zip path: %s", f.Name)
+		}
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(cleanTarget, 0755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(cleanTarget), 0755); err != nil {
+			return err
+		}
+		in, err := f.Open()
+		if err != nil {
+			return err
+		}
+		out, err := os.OpenFile(cleanTarget, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			in.Close()
+			return err
+		}
+		if _, err := io.Copy(out, in); err != nil {
+			out.Close()
+			in.Close()
+			return err
+		}
+		out.Close()
+		in.Close()
+	}
+
+	return nil
+}
+
 type figTomlConfig struct {
 	Project figProjectConfig               `toml:"project"`
 	Authors figAuthorsConfig               `toml:"authors"`
@@ -279,4 +471,14 @@ type figDependencyConfig struct {
 	Version  string `toml:"version"`
 	Source   string `toml:"source"`
 	Location string `toml:"location"`
+}
+
+type moduleTomlConfig struct {
+	Project moduleProjectConfig `toml:"project"`
+}
+
+type moduleProjectConfig struct {
+	Name    string `toml:"name"`
+	Version string `toml:"version"`
+	Main    string `toml:"main"`
 }

@@ -65,7 +65,7 @@ returnStmt
     ;
 
 importStmt
-    : TK_IMPORT STRING SEMICOLON?
+    : TK_IMPORT STRING ID? SEMICOLON?
     ;
 
 useStmt

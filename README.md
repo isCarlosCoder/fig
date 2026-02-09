@@ -39,6 +39,9 @@ sudo mv fig /usr/local/bin/
 
 ```bash
 fig run programa.fig    # executar arquivo
+fig run                # executar main via fig.toml
+fig init meu-projeto   # criar projeto
+fig install owner/repo # instalar modulo externo
 fig --version           # versão (0.1.0)
 fig --help              # ajuda
 ```
@@ -51,7 +54,7 @@ fig --help              # ajuda
 - Try/onerror para tratamento de erros
 - 14 módulos embutidos com 130+ funções
 - Cliente e servidor HTTP integrados
-- Importação de arquivos `.fig` e módulos builtin
+- Importação de arquivos `.fig`, módulos builtin e módulos externos
 - Sintaxe limpa — ponto e vírgula opcional, comentários com `#`
 
 ## Documentação

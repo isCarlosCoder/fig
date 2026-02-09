@@ -2,6 +2,7 @@ package environment
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -91,3 +92,17 @@ func (e *Env) Update(name string, val Value) bool {
 
 // Parent returns the parent environment (can be nil).
 func (e *Env) Parent() *Env { return e.parent }
+
+// Snapshot returns a copy of the current scope variables and sorted keys.
+func (e *Env) Snapshot() (map[string]Value, []string) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	entries := make(map[string]Value, len(e.vars))
+	keys := make([]string, 0, len(e.vars))
+	for k, v := range e.vars {
+		entries[k] = v
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return entries, keys
+}

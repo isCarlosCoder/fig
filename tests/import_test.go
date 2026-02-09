@@ -165,3 +165,27 @@ print(quadrado(5));`
 		t.Fatalf("expected '25', got %q", out)
 	}
 }
+
+func TestImportModuleAlias(t *testing.T) {
+	src := `import "mod:isCarlosCoder/myfigtestdependency" lib
+print(lib.hello("Fig"));`
+	out, err := runFigSource(t, src)
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "hello, Fig" {
+		t.Fatalf("expected 'hello, Fig', got %q", out)
+	}
+}
+
+func TestImportModuleDefaultName(t *testing.T) {
+	src := `import "mod:isCarlosCoder/myfigtestdependency"
+print(myfigtestdependency.magic);`
+	out, err := runFigSource(t, src)
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "42" {
+		t.Fatalf("expected '42', got %q", out)
+	}
+}

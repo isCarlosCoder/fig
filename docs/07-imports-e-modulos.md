@@ -4,6 +4,7 @@ Fig possui dois mecanismos de importação:
 
 - **`import`** — importa outro arquivo `.fig` (código do usuário)
 - **`use`** — importa um módulo embutido (builtin) da linguagem
+- **`import "mod:..."`** — importa um módulo externo instalado
 
 ---
 
@@ -35,8 +36,26 @@ print(subtrair(10, 4))  # 6
 - O caminho é uma **string** com o caminho relativo do arquivo
 - O arquivo importado é **executado** no escopo do importador
 - Todas as funções e variáveis declaradas ficam disponíveis
-- A extensão `.fig` é obrigatória
+- A extensão `.fig` é opcional
 - O import é resolvido em tempo de execução
+
+### Importando módulos externos
+
+Para módulos instalados em `_modules`, use o prefixo `mod:`:
+
+```js
+import "mod:isCarlosCoder/myfigtestdependency"
+print(myfigtestdependency.magic)
+```
+
+Você pode definir um alias:
+
+```js
+import "mod:isCarlosCoder/myfigtestdependency" lib
+print(lib.hello("Fig"))
+```
+
+> Para instalar um módulo, use `fig install <owner>/<repo>` no diretório do projeto.
 
 ### Organização em pastas
 
@@ -117,6 +136,15 @@ print(strings.contains("abc", "b"))  # true
 | Caminho     | Relativo ao arquivo atual      | Nome do módulo (string)        |
 | Acesso      | Direto (funções ficam no escopo)| Via prefixo `módulo.função()`  |
 | Sintaxe     | `import "caminho/arquivo.fig"` | `use "nomeDoModulo"`           |
+
+### Import externo (mod)
+
+| Aspecto     | `import "mod:..."`            |
+|------------|--------------------------------|
+| Carrega     | Módulo externo instalado        |
+| Caminho     | `mod:<owner>/<repo>`            |
+| Acesso      | Via nome do módulo ou alias     |
+| Sintaxe     | `import "mod:owner/repo" alias` |
 
 ---
 

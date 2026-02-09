@@ -14,6 +14,7 @@ import (
 	"github.com/iscarloscoder/fig/builtins"
 	"github.com/iscarloscoder/fig/environment"
 	"github.com/iscarloscoder/fig/parser"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // FigVisitor evaluates the parse tree. It keeps a global environment and a current (local) environment stack.
@@ -54,6 +55,9 @@ type FigVisitor struct {
 
 	// importedFiles tracks already-imported absolute paths to prevent circular imports
 	importedFiles map[string]bool
+
+	// importedModules caches module objects by entry file path
+	importedModules map[string]environment.Value
 }
 
 // syncWriter wraps an io.Writer with a mutex for goroutine-safe writes.
@@ -72,7 +76,12 @@ func NewFigVisitor(globalEnv *environment.Env, out io.Writer) *FigVisitor {
 	if out == nil {
 		out = os.Stdout
 	}
-	v := &FigVisitor{global: globalEnv, out: out, importedFiles: make(map[string]bool)}
+	v := &FigVisitor{
+		global:          globalEnv,
+		out:             out,
+		importedFiles:   make(map[string]bool),
+		importedModules: make(map[string]environment.Value),
+	}
 	// start with a local env whose parent is the global env
 	v.env = environment.NewEnv(globalEnv)
 	return v
@@ -326,6 +335,23 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 	// Get the string literal and strip quotes
 	raw := ctx.STRING().GetText()
 	modPath := raw[1 : len(raw)-1]
+	alias := ""
+	if ctx.ID() != nil {
+		alias = ctx.ID().GetText()
+	}
+
+	if strings.HasPrefix(modPath, "mod:") {
+		if err := v.importModule(modPath, alias, ctx); err != nil {
+			v.RuntimeErr = err
+		}
+		return nil
+	}
+
+	if alias != "" {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			"import alias is only supported for mod: imports", len(raw))
+		return nil
+	}
 
 	// Append .fig extension if not present
 	if !strings.HasSuffix(modPath, ".fig") {
@@ -386,6 +412,7 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 	// Save and restore visitor state
 	prevSrcLines := v.srcLines
 	prevBaseDir := v.baseDir
+	prevEnv := v.env
 
 	v.srcLines = strings.Split(source, "\n")
 	v.baseDir = filepath.Dir(absPath)
@@ -402,8 +429,151 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 	// Restore state
 	v.srcLines = prevSrcLines
 	v.baseDir = prevBaseDir
+	v.env = prevEnv
 
 	return nil
+}
+
+func (v *FigVisitor) importModule(modPath, alias string, ctx *parser.ImportStmtContext) error {
+	moduleSpec := strings.TrimPrefix(modPath, "mod:")
+	if moduleSpec == "" {
+		return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			"import mod: requires a module path", len(modPath))
+	}
+
+	projectToml, err := findProjectTomlFrom(v.baseDir)
+	if err != nil {
+		return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			"cannot locate fig.toml for module import", len(modPath))
+	}
+
+	projectRoot := filepath.Dir(projectToml)
+	moduleName := filepath.Base(moduleSpec)
+	if alias == "" {
+		alias = moduleName
+	}
+	moduleDir := filepath.Join(projectRoot, "_modules", moduleName)
+	moduleTomlPath := filepath.Join(moduleDir, "fig.toml")
+	modCfg, err := loadModuleToml(moduleTomlPath)
+	if err != nil {
+		return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			fmt.Sprintf("cannot read module fig.toml: %v", err), len(modPath))
+	}
+
+	entry := modCfg.Project.Main
+	if entry == "" {
+		entry = "src/main.fig"
+	}
+	entryPath := filepath.Join(moduleDir, entry)
+	absPath, err := filepath.Abs(entryPath)
+	if err != nil {
+		return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			fmt.Sprintf("cannot resolve module entry: %s", entryPath), len(modPath))
+	}
+
+	if cached, ok := v.importedModules[absPath]; ok {
+		if err := v.env.Define(alias, cached); err != nil {
+			return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(alias))
+		}
+		return nil
+	}
+
+	if v.importedFiles[absPath] {
+		return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			fmt.Sprintf("circular module import: %s", moduleSpec), len(modPath))
+	}
+	v.importedFiles[absPath] = true
+
+	data, readErr := os.ReadFile(absPath)
+	if readErr != nil {
+		return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			fmt.Sprintf("cannot import module \"%s\": %v", moduleSpec, readErr), len(modPath))
+	}
+
+	source := string(data)
+	is := antlr.NewInputStream(source)
+	lex := parser.NewFigLexer(is)
+	ts := antlr.NewCommonTokenStream(lex, antlr.TokenDefaultChannel)
+	p := parser.NewFigParser(ts)
+
+	p.RemoveErrorListeners()
+	listener := NewPrettyErrorListener(source, absPath, v.out)
+	p.AddErrorListener(listener)
+
+	tree := p.Program()
+	if listener.Occurred {
+		return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			fmt.Sprintf("parse error in module \"%s\"", moduleSpec), len(modPath))
+	}
+
+	prevSrcLines := v.srcLines
+	prevBaseDir := v.baseDir
+	prevEnv := v.env
+
+	moduleEnv := environment.NewEnv(v.env)
+	v.env = moduleEnv
+	v.srcLines = strings.Split(source, "\n")
+	v.baseDir = filepath.Dir(absPath)
+
+	progCtx := tree.(*parser.ProgramContext)
+	for _, st := range progCtx.AllStatements() {
+		v.VisitStatements(st.(*parser.StatementsContext))
+		if v.RuntimeErr != nil {
+			break
+		}
+	}
+
+	v.srcLines = prevSrcLines
+	v.baseDir = prevBaseDir
+	v.env = prevEnv
+
+	if v.RuntimeErr != nil {
+		return v.RuntimeErr
+	}
+
+	entries, keys := moduleEnv.Snapshot()
+	moduleObj := environment.NewObject(entries, keys)
+	v.importedModules[absPath] = moduleObj
+	if err := v.env.Define(alias, moduleObj); err != nil {
+		return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(alias))
+	}
+	return nil
+}
+
+type moduleTomlConfig struct {
+	Project moduleProjectConfig `toml:"project"`
+}
+
+type moduleProjectConfig struct {
+	Name string `toml:"name"`
+	Main string `toml:"main"`
+}
+
+func loadModuleToml(path string) (moduleTomlConfig, error) {
+	var cfg moduleTomlConfig
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return cfg, err
+	}
+	if err := toml.Unmarshal(data, &cfg); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
+}
+
+func findProjectTomlFrom(startDir string) (string, error) {
+	dir := startDir
+	for {
+		candidate := filepath.Join(dir, "fig.toml")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("fig.toml not found")
+		}
+		dir = parent
+	}
 }
 
 func (v *FigVisitor) VisitExprStmt(ctx *parser.ExprStmtContext) interface{} {
