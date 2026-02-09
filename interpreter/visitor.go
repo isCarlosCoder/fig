@@ -66,6 +66,9 @@ type FigVisitor struct {
 	// callDepth tracks nested function call depth to detect runaway recursion during debugging
 	callDepth int
 
+	// frames stores a runtime call/import stack for better error diagnostics
+	frames []StackFrame
+
 	// importedFiles tracks already-imported absolute paths to prevent circular imports
 	importedFiles map[string]bool
 
@@ -122,9 +125,23 @@ func (v *FigVisitor) popEnv() {
 	}
 }
 
+func (v *FigVisitor) pushFrame(kind, name, file string, line, column int) {
+	v.frames = append(v.frames, StackFrame{Kind: kind, Name: name, File: file, Line: line, Column: column})
+}
+
+func (v *FigVisitor) popFrame() {
+	if len(v.frames) > 0 {
+		v.frames = v.frames[:len(v.frames)-1]
+	}
+}
+
 // makeRuntimeError builds a RuntimeError with snippet information when source is available.
 func (v *FigVisitor) makeRuntimeError(line, column int, msg string, length int) *RuntimeError {
 	r := &RuntimeError{File: v.currentFile, Line: line, Column: column, Message: msg, ColumnStart: column, Length: length}
+	// attach current frames so errors show a stack trace
+	if len(v.frames) > 0 {
+		r.Frames = append([]StackFrame(nil), v.frames...)
+	}
 	if v.srcLines != nil && line-1 >= 0 && line-1 < len(v.srcLines) {
 		ln := v.srcLines[line-1]
 		r.Snippet = ln
@@ -474,12 +491,15 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 
 	// Visit all statements from the imported program directly
 	progCtx := tree.(*parser.ProgramContext)
+	// push a module frame so runtime errors show the imported file in the stack
+	v.pushFrame("module", filepath.Base(absPath), absPath, 1, 0)
 	for _, st := range progCtx.AllStatements() {
 		v.VisitStatements(st.(*parser.StatementsContext))
 		if v.RuntimeErr != nil {
 			break
 		}
 	}
+	v.popFrame()
 
 	// Restore state
 	v.srcLines = prevSrcLines
@@ -592,12 +612,15 @@ func (v *FigVisitor) importModule(modPath, alias string, ctx *parser.ImportStmtC
 	v.currentFile = absPath
 
 	progCtx := tree.(*parser.ProgramContext)
+	// push a module frame so runtime errors show the module file in the stack
+	v.pushFrame("module", filepath.Base(absPath), absPath, 1, 0)
 	for _, st := range progCtx.AllStatements() {
 		v.VisitStatements(st.(*parser.StatementsContext))
 		if v.RuntimeErr != nil {
 			break
 		}
 	}
+	v.popFrame()
 
 	v.srcLines = prevSrcLines
 	v.baseDir = prevBaseDir
@@ -1579,6 +1602,10 @@ func (v *FigVisitor) callFunction(line, col int, fnVal environment.Value, args [
 		return environment.NewNil()
 	}
 
+	// push a stack frame for this function call (show where it was defined)
+	v.pushFrame("function", name, fd.DefFile, fd.DefLine, 0)
+	defer v.popFrame()
+
 	// create a new scope for the function call (closure over the definition-time env)
 	prevEnv := v.env
 	v.env = environment.NewEnv(fd.ClosureEnv) // functions close over definition-time scope
@@ -2042,6 +2069,8 @@ func (v *FigVisitor) VisitFnDecl(ctx *parser.FnDeclContext) interface{} {
 		Params:     params,
 		Body:       ctx.Block(),
 		ClosureEnv: v.env, // capture the definition-time environment
+		DefFile:    v.currentFile,
+		DefLine:    ctx.GetStart().GetLine(),
 	}
 	if err := v.env.Define(name, environment.NewFunction(fd)); err != nil {
 		// allow redefinition of functions (overwrite)

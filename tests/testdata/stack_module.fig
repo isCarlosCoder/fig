@@ -1,0 +1,5 @@
+# module with a function that errors
+fn bad() {
+  let s = "not-a-number"
+  let x = s - 1
+}

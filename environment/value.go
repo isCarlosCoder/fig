@@ -27,6 +27,8 @@ type FuncDef struct {
 	Params     []string
 	Body       interface{} // *parser.BlockContext — kept as interface{} to avoid import cycle
 	ClosureEnv *Env        // the environment where the function was defined (lexical closure)
+	DefFile    string      // file where function was defined (for stack traces)
+	DefLine    int         // line where function was defined (for stack traces)
 }
 
 // BuiltinFn is the signature for native Go functions callable from Fig.
