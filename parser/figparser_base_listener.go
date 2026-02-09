@@ -242,6 +242,12 @@ func (s *BaseFigParserListener) EnterPostfix(ctx *PostfixContext) {}
 // ExitPostfix is called when production postfix is exited.
 func (s *BaseFigParserListener) ExitPostfix(ctx *PostfixContext) {}
 
+// EnterMemberName is called when production memberName is entered.
+func (s *BaseFigParserListener) EnterMemberName(ctx *MemberNameContext) {}
+
+// ExitMemberName is called when production memberName is exited.
+func (s *BaseFigParserListener) ExitMemberName(ctx *MemberNameContext) {}
+
 // EnterPrimary is called when production primary is entered.
 func (s *BaseFigParserListener) EnterPrimary(ctx *PrimaryContext) {}
 
@@ -253,6 +259,24 @@ func (s *BaseFigParserListener) EnterTryExpr(ctx *TryExprContext) {}
 
 // ExitTryExpr is called when production tryExpr is exited.
 func (s *BaseFigParserListener) ExitTryExpr(ctx *TryExprContext) {}
+
+// EnterMatchExpr is called when production matchExpr is entered.
+func (s *BaseFigParserListener) EnterMatchExpr(ctx *MatchExprContext) {}
+
+// ExitMatchExpr is called when production matchExpr is exited.
+func (s *BaseFigParserListener) ExitMatchExpr(ctx *MatchExprContext) {}
+
+// EnterMatchArmCase is called when production matchArmCase is entered.
+func (s *BaseFigParserListener) EnterMatchArmCase(ctx *MatchArmCaseContext) {}
+
+// ExitMatchArmCase is called when production matchArmCase is exited.
+func (s *BaseFigParserListener) ExitMatchArmCase(ctx *MatchArmCaseContext) {}
+
+// EnterMatchPattern is called when production matchPattern is entered.
+func (s *BaseFigParserListener) EnterMatchPattern(ctx *MatchPatternContext) {}
+
+// ExitMatchPattern is called when production matchPattern is exited.
+func (s *BaseFigParserListener) ExitMatchPattern(ctx *MatchPatternContext) {}
 
 // EnterArrayLiteral is called when production arrayLiteral is entered.
 func (s *BaseFigParserListener) EnterArrayLiteral(ctx *ArrayLiteralContext) {}

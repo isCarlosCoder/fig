@@ -26,4 +26,14 @@ func TestSystemArgvAndCwdProperties(t *testing.T) {
 	if out != "[\"x\", \"y\"]\n/tmp" {
 		t.Fatalf("unexpected output: %q", out)
 	}
+
+	// Check indexing off the call: system.argv()[0]
+	builtins.ScriptArgs = []string{"one"}
+	out2, err := runFig(t, `use "system"; use "types"; print(types.type(system.argv()[0])); print(system.argv()[0]);`)
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out2 != "string\none" {
+		t.Fatalf("unexpected output for argv()[0]: %q", out2)
+	}
 }

@@ -119,7 +119,7 @@ varAtribuition
     ;
 
 memberAssign
-    : expr (LBRACKET expr RBRACKET | DOT ID)+ ASSIGN expr SEMICOLON?
+    : expr (LBRACKET expr RBRACKET | DOT memberName)+ ASSIGN expr SEMICOLON?
     ;
 
 printStmt
@@ -134,7 +134,8 @@ comparison: term ( ( GT | GE | LT | LE ) term )* ;
 term: factor ( ( PLUS | MINUS ) factor )* ;
 factor: unary ( ( STAR | SLASH | MOD ) unary )* ;
 unary: ( MINUS | EXCLAM | PLUSPLUS | MINUSMINUS ) unary | postfix ;
-postfix: primary ( LBRACKET expr RBRACKET | DOT ID | LPAREN fnArgs? RPAREN )* ;
+postfix: primary ( LBRACKET expr RBRACKET | DOT memberName | LPAREN fnArgs? RPAREN )* ;
+memberName: ID | TK_MATCH ;
 primary
     : NUMBER
     | BOOL
@@ -144,6 +145,7 @@ primary
     | arrayLiteral
     | objectLiteral
     | tryExpr
+    | matchExpr
     | TK_FN LPAREN fnParams? RPAREN block
     | ID LPAREN fnArgs? RPAREN
     | ID ( PLUSPLUS | MINUSMINUS )?
@@ -152,6 +154,18 @@ primary
 
 tryExpr
     : TK_TRY expr TK_ONERROR (LPAREN ID? RPAREN)? block
+    ;
+
+matchExpr
+    : TK_MATCH expr LBRACE matchArm+ RBRACE
+    ;
+
+matchArm
+    : matchPattern ARROW (block | expr)       # matchArmCase
+    ;  
+
+matchPattern
+    : expr (COMMA expr)*
     ;
 
 arrayLiteral

@@ -118,11 +118,23 @@ type FigParserVisitor interface {
 	// Visit a parse tree produced by FigParser#postfix.
 	VisitPostfix(ctx *PostfixContext) interface{}
 
+	// Visit a parse tree produced by FigParser#memberName.
+	VisitMemberName(ctx *MemberNameContext) interface{}
+
 	// Visit a parse tree produced by FigParser#primary.
 	VisitPrimary(ctx *PrimaryContext) interface{}
 
 	// Visit a parse tree produced by FigParser#tryExpr.
 	VisitTryExpr(ctx *TryExprContext) interface{}
+
+	// Visit a parse tree produced by FigParser#matchExpr.
+	VisitMatchExpr(ctx *MatchExprContext) interface{}
+
+	// Visit a parse tree produced by FigParser#matchArmCase.
+	VisitMatchArmCase(ctx *MatchArmCaseContext) interface{}
+
+	// Visit a parse tree produced by FigParser#matchPattern.
+	VisitMatchPattern(ctx *MatchPatternContext) interface{}
 
 	// Visit a parse tree produced by FigParser#arrayLiteral.
 	VisitArrayLiteral(ctx *ArrayLiteralContext) interface{}

@@ -48,7 +48,9 @@ TK_STRUCT: 'struct' ;
 TK_THIS: 'this' ;
 TK_TRY: 'try' ;
 TK_ONERROR: 'onerror' ;
+TK_MATCH: 'match' ;
 COMMA: ',' ;
+ARROW: '=>' ;
 
 // Array / object tokens
 LBRACKET: '[' ;

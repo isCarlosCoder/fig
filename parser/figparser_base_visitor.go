@@ -155,11 +155,27 @@ func (v *BaseFigParserVisitor) VisitPostfix(ctx *PostfixContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseFigParserVisitor) VisitMemberName(ctx *MemberNameContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseFigParserVisitor) VisitPrimary(ctx *PrimaryContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
 func (v *BaseFigParserVisitor) VisitTryExpr(ctx *TryExprContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseFigParserVisitor) VisitMatchExpr(ctx *MatchExprContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseFigParserVisitor) VisitMatchArmCase(ctx *MatchArmCaseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseFigParserVisitor) VisitMatchPattern(ctx *MatchPatternContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 

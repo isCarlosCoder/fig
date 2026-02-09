@@ -118,11 +118,23 @@ type FigParserListener interface {
 	// EnterPostfix is called when entering the postfix production.
 	EnterPostfix(c *PostfixContext)
 
+	// EnterMemberName is called when entering the memberName production.
+	EnterMemberName(c *MemberNameContext)
+
 	// EnterPrimary is called when entering the primary production.
 	EnterPrimary(c *PrimaryContext)
 
 	// EnterTryExpr is called when entering the tryExpr production.
 	EnterTryExpr(c *TryExprContext)
+
+	// EnterMatchExpr is called when entering the matchExpr production.
+	EnterMatchExpr(c *MatchExprContext)
+
+	// EnterMatchArmCase is called when entering the matchArmCase production.
+	EnterMatchArmCase(c *MatchArmCaseContext)
+
+	// EnterMatchPattern is called when entering the matchPattern production.
+	EnterMatchPattern(c *MatchPatternContext)
 
 	// EnterArrayLiteral is called when entering the arrayLiteral production.
 	EnterArrayLiteral(c *ArrayLiteralContext)
@@ -244,11 +256,23 @@ type FigParserListener interface {
 	// ExitPostfix is called when exiting the postfix production.
 	ExitPostfix(c *PostfixContext)
 
+	// ExitMemberName is called when exiting the memberName production.
+	ExitMemberName(c *MemberNameContext)
+
 	// ExitPrimary is called when exiting the primary production.
 	ExitPrimary(c *PrimaryContext)
 
 	// ExitTryExpr is called when exiting the tryExpr production.
 	ExitTryExpr(c *TryExprContext)
+
+	// ExitMatchExpr is called when exiting the matchExpr production.
+	ExitMatchExpr(c *MatchExprContext)
+
+	// ExitMatchArmCase is called when exiting the matchArmCase production.
+	ExitMatchArmCase(c *MatchArmCaseContext)
+
+	// ExitMatchPattern is called when exiting the matchPattern production.
+	ExitMatchPattern(c *MatchPatternContext)
 
 	// ExitArrayLiteral is called when exiting the arrayLiteral production.
 	ExitArrayLiteral(c *ArrayLiteralContext)

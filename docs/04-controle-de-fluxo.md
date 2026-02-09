@@ -222,11 +222,127 @@ for i in range(0, 10) {
 
 ---
 
+## match
+
+O `match` é uma estrutura de controle que compara um valor com vários padrões e executa o código correspondente ao primeiro padrão que coincidir. É uma alternativa mais limpa a cadeias de `if/elif`.
+
+### Sintaxe básica
+
+```js
+let x = 2
+match x {
+    1 => { print("um") }
+    2 => { print("dois") }
+    3 => { print("três") }
+}
+# Saída: dois
+```
+
+### Padrão coringa `_`
+
+Use `_` para capturar qualquer valor que não corresponda a nenhum padrão anterior (equivalente ao `else`):
+
+```js
+let cor = "roxo"
+match cor {
+    "vermelho" => { print("Red") }
+    "azul" => { print("Blue") }
+    _ => { print("Outra cor") }
+}
+# Saída: Outra cor
+```
+
+### Match como expressão (com retorno)
+
+O `match` pode ser usado como expressão para atribuir o resultado a uma variável. Neste caso, os braços usam valores inline ao invés de blocos:
+
+```js
+let valor = 1
+let resultado = match valor {
+    1 => "um"
+    2 => "dois"
+    _ => "outro"
+}
+print(resultado)  # "um"
+```
+
+### Múltiplos valores por braço
+
+É possível listar vários valores separados por vírgula em um mesmo braço:
+
+```js
+let n = 5
+match n {
+    1, 3, 5 => { print("ímpar") }
+    2, 4, 6 => { print("par") }
+    _ => { print("outro") }
+}
+# Saída: ímpar
+```
+
+### Match com expressões
+
+Tanto o valor a ser comparado quanto os padrões podem ser expressões:
+
+```js
+let a = 3
+let b = 2
+match a + b {
+    4 => { print("quatro") }
+    5 => { print("cinco") }
+    6 => { print("seis") }
+}
+# Saída: cinco
+```
+
+### Match com tipos
+
+Combine com `types.type()` para verificar tipos:
+
+```js
+use "types"
+
+let x = 42
+match types.type(x) {
+    "number" => { print("é número") }
+    "string" => { print("é string") }
+    _ => { print("outro tipo") }
+}
+# Saída: é número
+```
+
+### Match em funções
+
+O `match` pode ser usado com `return` em funções:
+
+```js
+fn classificar(n) {
+    return match n {
+        1 => "um"
+        2 => "dois"
+        _ => "muitos"
+    }
+}
+
+print(classificar(1))   # "um"
+print(classificar(99))  # "muitos"
+```
+
+### Regras
+
+- O primeiro padrão que coincidir é executado (não há fall-through)
+- Se nenhum padrão coincidir e não houver `_`, o resultado é `null`
+- Os braços podem usar blocos `{ }` ou expressões inline
+- O `_` (coringa) deve ser o último braço
+
+---
+
 ## Resumo
 
 | Estrutura    | Uso                                          |
 |-------------|----------------------------------------------|
 | `if/elif/else` | Execução condicional                      |
+| `match`     | Compara valor com padrões (alternativa a if/elif) |
 | `while`     | Repete enquanto condição for verdadeira       |
 | `do-while`  | Executa pelo menos uma vez, depois repete     |
 | `for`       | Loop clássico com inicialização/condição/passo|

@@ -1189,6 +1189,10 @@ func (v *FigVisitor) VisitPrimary(ctx *parser.PrimaryContext) interface{} {
 	if ctx.TryExpr() != nil {
 		return v.VisitTryExpr(ctx.TryExpr().(*parser.TryExprContext))
 	}
+	// ── match expression ──
+	if ctx.MatchExpr() != nil {
+		return v.VisitMatchExpr(ctx.MatchExpr().(*parser.MatchExprContext))
+	}
 	// ── anonymous function expression: fn(params) block ──
 	if ctx.TK_FN() != nil {
 		var params []string
@@ -1318,6 +1322,74 @@ func (v *FigVisitor) VisitTryExpr(ctx *parser.TryExprContext) interface{} {
 	}
 
 	// Block fell through without return — result is null
+	return environment.NewNil()
+}
+
+// VisitMatchExpr evaluates a match expression: match expr { pattern => body ... }
+func (v *FigVisitor) VisitMatchExpr(ctx *parser.MatchExprContext) interface{} {
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+
+	// Evaluate the subject expression
+	subject := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+
+	// Iterate through match arms
+	for _, arm := range ctx.AllMatchArm() {
+		armCtx := arm.(*parser.MatchArmCaseContext)
+		patternCtx := armCtx.MatchPattern().(*parser.MatchPatternContext)
+		exprs := patternCtx.AllExpr()
+
+		// Check if this is the wildcard arm ( _ )
+		isWildcard := false
+		if len(exprs) == 1 {
+			text := exprs[0].GetText()
+			if text == "_" {
+				isWildcard = true
+			}
+		}
+
+		matched := isWildcard
+		if !isWildcard {
+			// Evaluate each pattern expression and compare with the subject
+			for _, patExpr := range exprs {
+				patVal := v.VisitExpr(patExpr.(*parser.ExprContext)).(environment.Value)
+				if v.RuntimeErr != nil {
+					return environment.NewNil()
+				}
+				if valuesEqual(subject, patVal) {
+					matched = true
+					break
+				}
+			}
+		}
+
+		if matched {
+			// Execute the body: either a block or an inline expression
+			if armCtx.Block() != nil {
+				v.pushEnv()
+				result := v.visitBlockRaw(armCtx.Block().(*parser.BlockContext))
+				v.popEnv()
+
+				if ret, ok := result.(returnSignal); ok {
+					return ret.value
+				}
+				if sig, ok := result.(loopSignal); ok {
+					v.pendingLoopSignal = sig
+					return environment.NewNil()
+				}
+
+				return environment.NewNil()
+			}
+			// Inline expression (match arm without block)
+			return v.VisitExpr(armCtx.Expr().(*parser.ExprContext)).(environment.Value)
+		}
+	}
+
+	// No arm matched — return nil
 	return environment.NewNil()
 }
 
@@ -1508,32 +1580,53 @@ func (v *FigVisitor) VisitPostfix(ctx *parser.PostfixContext) interface{} {
 	i := 1 // skip primary (child 0)
 	for i < len(children) {
 		c := children[i]
-		tn, ok := c.(antlr.TerminalNode)
-		if !ok {
+		// process terminal nodes only; skip other nodes
+		if _, ok := c.(antlr.TerminalNode); !ok {
 			i++
 			continue
 		}
+		tn := c.(antlr.TerminalNode)
 		tok := tn.GetSymbol()
 		switch tok.GetTokenType() {
 		case parser.FigParserLBRACKET:
-			// index access: [expr]
+			// index access: [ expr ]
 			receiver = nil
-			i++ // skip [
-			exprNode := children[i]
-			idx := v.VisitExpr(exprNode.(*parser.ExprContext)).(environment.Value)
-			if v.RuntimeErr != nil {
-				return environment.NewNil()
+			// debug
+
+			// children: '[' expr ']'
+			if i+2 < len(children) {
+				exprNode := children[i+1]
+				idx := v.VisitExpr(exprNode.(*parser.ExprContext)).(environment.Value)
+				if v.RuntimeErr != nil {
+					return environment.NewNil()
+				}
+				val = v.indexAccess(tok.GetLine(), tok.GetColumn(), val, idx)
+				if v.RuntimeErr != nil {
+					return environment.NewNil()
+				}
 			}
-			i++ // skip ]
-			val = v.indexAccess(tok.GetLine(), tok.GetColumn(), val, idx)
-			if v.RuntimeErr != nil {
-				return environment.NewNil()
-			}
+			// advance past '[', expr, ']'
+			i += 3
 		case parser.FigParserDOT:
-			// dot access: .ID
-			i++ // skip .
-			idNode := children[i].(antlr.TerminalNode)
-			key := idNode.GetText()
+			// dot access: .memberName  (memberName = ID | TK_MATCH)
+
+			if i+1 >= len(children) {
+				i++
+				continue
+			}
+			// next child may be a MemberNameContext or a TerminalNode
+			var key string
+			if mn, ok := children[i+1].(*parser.MemberNameContext); ok {
+				key = mn.GetText()
+				// advance past '.' and memberName
+				i += 2
+			} else if tn2, ok := children[i+1].(antlr.TerminalNode); ok {
+				key = tn2.GetText()
+				i += 2
+			} else {
+				i++
+				continue
+			}
 			// remember lastKey for error messages
 			lastKey = key
 			// track receiver for method calls on instances
@@ -1548,51 +1641,53 @@ func (v *FigVisitor) VisitPostfix(ctx *parser.PostfixContext) interface{} {
 				return environment.NewNil()
 			}
 		case parser.FigParserLPAREN:
-			// function call: (args)
-			i++ // skip (
-			// find FnArgs if present
+			// function call: ( args? )
+			// next child may be IFnArgsContext or ')' terminal
 			var args []environment.Value
-			if next, ok := children[i].(parser.IFnArgsContext); ok {
-				args = v.evaluateArgs(next)
-				if v.RuntimeErr != nil {
-					return environment.NewNil()
+			if i+1 < len(children) {
+				if next, ok := children[i+1].(parser.IFnArgsContext); ok {
+					args = v.evaluateArgs(next)
+					if v.RuntimeErr != nil {
+						return environment.NewNil()
+					}
+					// advance past '(', fnArgs, ')'
+					i += 3
+				} else {
+					// advance past '(' and ')'
+					i += 2
 				}
-				i++ // skip fnArgs
-			}
-			i++ // skip )
-
-			// struct instantiation in postfix chain
-			if val.Type == environment.StructDefType {
-				val = v.instantiateStruct(tok.GetLine(), tok.GetColumn(), val.Struct, args)
-				receiver = nil
-				if v.RuntimeErr != nil {
-					return environment.NewNil()
-				}
-			} else if receiver != nil && val.Type == environment.FunctionType {
-				// method call: inject "this"
-				val = v.callMethod(tok.GetLine(), tok.GetColumn(), *receiver, val, args)
-				receiver = nil
-				if v.RuntimeErr != nil {
-					return environment.NewNil()
-				}
-			} else {
-				receiver = nil
-				// determine helpful callee description for error messages
-				callee := ""
-				if lastKey != "" {
-					callee = fmt.Sprintf("%s", lastKey)
-				}
-				val = v.callFunction(tok.GetLine(), tok.GetColumn(), val, args, callee).(environment.Value)
-				// reset lastKey after the call
-				lastKey = ""
-				if v.RuntimeErr != nil {
-					return environment.NewNil()
+				// handle call/instantiation/method
+				if val.Type == environment.StructDefType {
+					val = v.instantiateStruct(tok.GetLine(), tok.GetColumn(), val.Struct, args)
+					receiver = nil
+					if v.RuntimeErr != nil {
+						return environment.NewNil()
+					}
+				} else if receiver != nil && val.Type == environment.FunctionType {
+					// method call: inject "this"
+					val = v.callMethod(tok.GetLine(), tok.GetColumn(), *receiver, val, args)
+					receiver = nil
+					if v.RuntimeErr != nil {
+						return environment.NewNil()
+					}
+				} else {
+					receiver = nil
+					callee := ""
+					if lastKey != "" {
+						callee = fmt.Sprintf("%s", lastKey)
+					}
+					val = v.callFunction(tok.GetLine(), tok.GetColumn(), val, args, callee).(environment.Value)
+					// reset lastKey after the call
+					lastKey = ""
+					if v.RuntimeErr != nil {
+						return environment.NewNil()
+					}
 				}
 			}
 		default:
+			// unknown terminal: advance
 			i++
 		}
-		i++
 	}
 	return val
 }
@@ -1761,8 +1856,13 @@ func (v *FigVisitor) VisitMemberAssign(ctx *parser.MemberAssignContext) interfac
 				exprIdx++
 			}
 		case parser.FigParserDOT:
-			// next terminal is the ID
+			// next node is memberName (rule) or terminal ID
 			for j := i + 1; j < len(children); j++ {
+				if mn, ok := children[j].(*parser.MemberNameContext); ok {
+					chain = append(chain, accessStep{isIndex: false, key: mn.GetText()})
+					i = j
+					break
+				}
 				if idTn, ok := children[j].(antlr.TerminalNode); ok && idTn.GetSymbol().GetTokenType() == parser.FigParserID {
 					chain = append(chain, accessStep{isIndex: false, key: idTn.GetText()})
 					i = j
