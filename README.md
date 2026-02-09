@@ -151,6 +151,7 @@ meu-projeto/
 | [regex](docs/modules/regex.md) | Expressões regulares | 4 funções |
 | [functional](docs/modules/functional.md) | Programação funcional | 5 funções |
 | [debug](docs/modules/debug.md) | Depuração e diagnóstico | 5 funções |
+| [utils](docs/modules/utils.md) | Utilitários pequenos (misc) | ord, chr |
 | [runtime](docs/modules/runtime.md) | Informações do runtime | 5 funções |
 | [task](docs/modules/task.md) | Concorrência com goroutines | 4 funções |
 | [date](docs/modules/date.md) | Manipulação de datas e horários | 6 funções |
