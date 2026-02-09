@@ -79,6 +79,12 @@ type FigParserVisitor interface {
 	// Visit a parse tree produced by FigParser#structMethod.
 	VisitStructMethod(ctx *StructMethodContext) interface{}
 
+	// Visit a parse tree produced by FigParser#enumDecl.
+	VisitEnumDecl(ctx *EnumDeclContext) interface{}
+
+	// Visit a parse tree produced by FigParser#enumMember.
+	VisitEnumMember(ctx *EnumMemberContext) interface{}
+
 	// Visit a parse tree produced by FigParser#varDeclaration.
 	VisitVarDeclaration(ctx *VarDeclarationContext) interface{}
 

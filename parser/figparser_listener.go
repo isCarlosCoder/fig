@@ -79,6 +79,12 @@ type FigParserListener interface {
 	// EnterStructMethod is called when entering the structMethod production.
 	EnterStructMethod(c *StructMethodContext)
 
+	// EnterEnumDecl is called when entering the enumDecl production.
+	EnterEnumDecl(c *EnumDeclContext)
+
+	// EnterEnumMember is called when entering the enumMember production.
+	EnterEnumMember(c *EnumMemberContext)
+
 	// EnterVarDeclaration is called when entering the varDeclaration production.
 	EnterVarDeclaration(c *VarDeclarationContext)
 
@@ -216,6 +222,12 @@ type FigParserListener interface {
 
 	// ExitStructMethod is called when exiting the structMethod production.
 	ExitStructMethod(c *StructMethodContext)
+
+	// ExitEnumDecl is called when exiting the enumDecl production.
+	ExitEnumDecl(c *EnumDeclContext)
+
+	// ExitEnumMember is called when exiting the enumMember production.
+	ExitEnumMember(c *EnumMemberContext)
 
 	// ExitVarDeclaration is called when exiting the varDeclaration production.
 	ExitVarDeclaration(c *VarDeclarationContext)

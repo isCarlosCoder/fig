@@ -25,6 +25,7 @@ statements
     | importStmt
     | useStmt
     | structDecl
+    | enumDecl
     | exprStmt
     ;
 
@@ -108,6 +109,14 @@ structDecl
 structMember
     : ID (ASSIGN expr)? SEMICOLON?       # structField
     | TK_FN ID LPAREN fnParams? RPAREN block  # structMethod
+    ;
+
+enumDecl
+    : TK_ENUM ID LBRACE enumMember* RBRACE
+    ;
+
+enumMember
+    : ID SEMICOLON?
     ;
 
 varDeclaration  

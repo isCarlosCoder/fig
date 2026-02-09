@@ -103,6 +103,14 @@ func (v *BaseFigParserVisitor) VisitStructMethod(ctx *StructMethodContext) inter
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseFigParserVisitor) VisitEnumDecl(ctx *EnumDeclContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseFigParserVisitor) VisitEnumMember(ctx *EnumMemberContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseFigParserVisitor) VisitVarDeclaration(ctx *VarDeclarationContext) interface{} {
 	return v.VisitChildren(ctx)
 }

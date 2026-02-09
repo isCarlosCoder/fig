@@ -19,6 +19,8 @@ const (
 	ObjectType
 	StructDefType
 	InstanceType
+	EnumType
+	EnumMemberType
 )
 
 // FuncDef holds the information needed to call a user-defined function.
@@ -53,18 +55,38 @@ type Instance struct {
 	Fields *ObjData // field values (pointer for mutability)
 }
 
+// EnumDef describes an enum type declaration.
+type EnumDef struct {
+	Name    string
+	Members []string // ordered member names
+}
+
+// EnumMember represents a single enum variant value.
+type EnumMember struct {
+	EnumName string
+	Name     string
+	Ordinal  int
+}
+
 type Value struct {
 	Type    ValueType
 	Num     float64
 	Str     string
 	Bool    bool
-	Func    *FuncDef   // non-nil when Type == FunctionType
-	Builtin BuiltinFn  // non-nil when Type == BuiltinFnType
-	BName   string     // builtin function name (for error messages)
-	Arr     *[]Value   // non-nil when Type == ArrayType (pointer for mutability)
-	Obj     *ObjData   // non-nil when Type == ObjectType (pointer for mutability)
-	Struct  *StructDef // non-nil when Type == StructDefType
-	Inst    *Instance  // non-nil when Type == InstanceType
+	Func    *FuncDef    // non-nil when Type == FunctionType
+	Builtin BuiltinFn   // non-nil when Type == BuiltinFnType
+	BName   string      // builtin function name (for error messages)
+	Arr     *[]Value    // non-nil when Type == ArrayType (pointer for mutability)
+	Obj     *ObjData    // non-nil when Type == ObjectType (pointer for mutability)
+	Struct  *StructDef  // non-nil when Type == StructDefType
+	Inst    *Instance   // non-nil when Type == InstanceType
+	EnumDef *EnumDef    // non-nil when Type == EnumType
+	EnumMem *EnumMember // non-nil when Type == EnumMemberType
+}
+
+func NewEnumDef(ed *EnumDef) Value { return Value{Type: EnumType, EnumDef: ed} }
+func NewEnumMember(enumName, name string, ord int) Value {
+	return Value{Type: EnumMemberType, EnumMem: &EnumMember{EnumName: enumName, Name: name, Ordinal: ord}}
 }
 
 // ObjData stores object key-value pairs with insertion order.
@@ -150,6 +172,16 @@ func (v Value) String() string {
 			return fmt.Sprintf("<struct %s>", v.Struct.Name)
 		}
 		return "<struct>"
+	case EnumType:
+		if v.EnumDef != nil {
+			return fmt.Sprintf("<enum %s>", v.EnumDef.Name)
+		}
+		return "<enum>"
+	case EnumMemberType:
+		if v.EnumMem != nil {
+			return fmt.Sprintf("%s.%s", v.EnumMem.EnumName, v.EnumMem.Name)
+		}
+		return "<enum member>"
 	case InstanceType:
 		if v.Inst != nil {
 			parts := make([]string, 0, len(v.Inst.Fields.Keys))
@@ -237,6 +269,11 @@ func (v Value) TypeName() string {
 		return "object"
 	case StructDefType:
 		return "struct"
+	case EnumMemberType:
+		if v.EnumMem != nil {
+			return v.EnumMem.EnumName
+		}
+		return "enum"
 	case InstanceType:
 		if v.Inst != nil {
 			return v.Inst.Def.Name

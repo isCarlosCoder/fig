@@ -45,6 +45,7 @@ TK_IN: 'in' ;
 TK_RANGE: 'range' ;
 TK_ENUMERATE: 'enumerate' ;
 TK_STRUCT: 'struct' ;
+TK_ENUM: 'enum' ;
 TK_THIS: 'this' ;
 TK_TRY: 'try' ;
 TK_ONERROR: 'onerror' ;

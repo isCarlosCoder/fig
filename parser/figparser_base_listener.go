@@ -164,6 +164,18 @@ func (s *BaseFigParserListener) EnterStructMethod(ctx *StructMethodContext) {}
 // ExitStructMethod is called when production structMethod is exited.
 func (s *BaseFigParserListener) ExitStructMethod(ctx *StructMethodContext) {}
 
+// EnterEnumDecl is called when production enumDecl is entered.
+func (s *BaseFigParserListener) EnterEnumDecl(ctx *EnumDeclContext) {}
+
+// ExitEnumDecl is called when production enumDecl is exited.
+func (s *BaseFigParserListener) ExitEnumDecl(ctx *EnumDeclContext) {}
+
+// EnterEnumMember is called when production enumMember is entered.
+func (s *BaseFigParserListener) EnterEnumMember(ctx *EnumMemberContext) {}
+
+// ExitEnumMember is called when production enumMember is exited.
+func (s *BaseFigParserListener) ExitEnumMember(ctx *EnumMemberContext) {}
+
 // EnterVarDeclaration is called when production varDeclaration is entered.
 func (s *BaseFigParserListener) EnterVarDeclaration(ctx *VarDeclarationContext) {}
 

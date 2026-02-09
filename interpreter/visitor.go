@@ -253,6 +253,9 @@ func (v *FigVisitor) VisitStatements(ctx *parser.StatementsContext) interface{} 
 	if ctx.StructDecl() != nil {
 		return v.VisitStructDecl(ctx.StructDecl().(*parser.StructDeclContext))
 	}
+	if ctx.EnumDecl() != nil {
+		return v.VisitEnumDecl(ctx.EnumDecl().(*parser.EnumDeclContext))
+	}
 	if ctx.ExprStmt() != nil {
 		return v.VisitExprStmt(ctx.ExprStmt().(*parser.ExprStmtContext))
 	}
@@ -408,6 +411,28 @@ func (v *FigVisitor) VisitStructDecl(ctx *parser.StructDeclContext) interface{} 
 	}
 
 	if err := v.env.Define(name, environment.NewStructDef(sd)); err != nil {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(name))
+	}
+	return nil
+}
+
+// enum declaration
+func (v *FigVisitor) VisitEnumDecl(ctx *parser.EnumDeclContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	name := ctx.ID().GetText()
+	entries := make(map[string]environment.Value)
+	var keys []string
+	for i, m := range ctx.AllEnumMember() {
+		em := m.(*parser.EnumMemberContext)
+		mname := em.ID().GetText()
+		val := environment.NewEnumMember(name, mname, i)
+		entries[mname] = val
+		keys = append(keys, mname)
+	}
+	// Define enum name as an object mapping member names to enum values
+	if err := v.env.Define(name, environment.NewObject(entries, keys)); err != nil {
 		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(name))
 	}
 	return nil
@@ -2666,6 +2691,11 @@ func valuesEqualSeen(a, b environment.Value, seen map[[2]uintptr]bool) bool {
 			}
 		}
 		return true
+	case environment.EnumMemberType:
+		if a.EnumMem == nil || b.EnumMem == nil {
+			return false
+		}
+		return a.EnumMem.EnumName == b.EnumMem.EnumName && a.EnumMem.Name == b.EnumMem.Name
 	}
 	return false
 }
