@@ -54,16 +54,16 @@ print(inexistente)  # null
 
 ### system.args()
 
-Retorna os argumentos de linha de comando como array:
+Retorna os argumentos de linha de comando do processo como array (equivalente a `os.Args`):
 
 ```js
 let argumentos = system.args()
 print(argumentos)
 ```
 
-### system.argv (property)
+### system.argv()
 
-Quando você executa um script com `fig run <file> [args]`, o CLI injeta os argumentos do script na propriedade `system.argv` como um `array` de strings. Exemplo:
+Quando você executa um script com `fig run <file> [args]`, o CLI injeta os argumentos do script (aqueles após o nome do arquivo) na função `system.argv()` como um `array` de strings. Exemplo de uso no shell:
 
 ```sh
 fig run myscript.fig a b
@@ -73,16 +73,16 @@ No script:
 
 ```js
 use "system"
-print(system.argv) // ["a", "b"]
+print(system.argv()) // ["a", "b"]
 ```
 
-### system.cwd (property)
+### system.cwd()
 
-A propriedade `system.cwd` contém o diretório de trabalho atual (string) no momento da execução do script:
+A função `system.cwd()` retorna o diretório de trabalho atual (string) no momento da execução do script:
 
 ```js
 use "system"
-print(system.cwd) // ex: /home/user/projects
+print(system.cwd()) // ex: /home/user/projects
 ```
 
 ### system.platform()
@@ -133,13 +133,15 @@ print("Tempo: " + (fim - inicio) + "s")
 
 ## Referência rápida
 
-| Função               | Descrição                               |
-|---------------------|-----------------------------------------|
-| `system.now()`       | Timestamp Unix em milissegundos          |
-| `system.clock()`     | Tempo em segundos (alta precisão)        |
-| `system.sleep(ms)`   | Pausar por N milissegundos               |
-| `system.env(name)`   | Variável de ambiente                     |
-| `system.args()`      | Argumentos de linha de comando           |
-| `system.platform()`  | Nome do sistema operacional              |
-| `system.version()`   | Versão da linguagem Fig                  |
-| `system.exit(code?)` | Encerrar o programa                      |
+| Função               | Descrição                                    |
+|---------------------|-----------------------------------------------|
+| `system.now()`       | Timestamp Unix em milissegundos               |
+| `system.clock()`     | Tempo em segundos (alta precisão)             |
+| `system.sleep(ms)`   | Pausar por N milissegundos                    |
+| `system.env(name)`   | Variável de ambiente                          |
+| `system.args()`      | Argumentos do processo (`os.Args`)            |
+| `system.argv()`      | Argumentos do script (passados ao `fig run`)  |
+| `system.cwd()`       | Diretório de trabalho no momento da execução  |
+| `system.platform()`  | Nome do sistema operacional                   |
+| `system.version()`   | Versão da linguagem Fig                       |
+| `system.exit(code?)` | Encerrar o programa                           |
