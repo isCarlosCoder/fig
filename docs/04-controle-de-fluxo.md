@@ -234,6 +234,7 @@ match x {
     1 => { print("um") }
     2 => { print("dois") }
     3 => { print("três") }
+    _ => { print("outro") }  # padrão coringa
 }
 # Saída: dois
 ```
@@ -330,10 +331,13 @@ print(classificar(99))  # "muitos"
 
 ### Regras
 
-- O primeiro padrão que coincidir é executado (não há fall-through)
-- Se nenhum padrão coincidir e não houver `_`, o resultado é `null`
-- Os braços podem usar blocos `{ }` ou expressões inline
-- O `_` (coringa) deve ser o último braço
+- **O primeiro padrão que coincidir é executado** (não há fall-through).
+- **É obrigatório ter um braço padrão** usando o `_` (coringa). Se não houver `_`, o `match` gera um **erro em tempo de execução**.
+- **Padrões duplicados não são permitidos.** Se dois padrões avaliarem para o mesmo valor, o `match` falha com erro em tempo de execução.
+- **O coringa `_` deve ficar sozinho no seu braço** — não é permitido escrever `_ , 1` no mesmo padrão.
+- **Os padrões são avaliados antes da correspondência** e duplicatas são detectadas com base nos valores avaliados (portanto, *efeitos colaterais dos padrões ocorrem durante essa avaliação*).
+- Os braços podem usar blocos `{ }` ou expressões inline.
+- O `_` (coringa) deve ser o último braço.
 
 ---
 
