@@ -23,6 +23,61 @@ print(resultado)  # -1
 
 Sem `try`, a divisão por zero causaria um erro fatal. Com `try`, o erro é capturado e o bloco `onerror` fornece um valor alternativo via `return`.
 
+## Try com bloco guardado
+
+A parte protegida do `try` pode ser uma **expressão** ou um **bloco**. Usar um bloco permite executar código mais complexo (como `return`, `break`, `continue`) dentro da seção protegida.
+
+Sintaxe:
+
+```js
+try {
+    // código que pode usar return, break, continue
+} onerror(e) {
+    // tratamento
+}
+```
+
+Comportamento:
+
+- Se o bloco guardado executar sem erro:
+  - Se fizer `return <valor>`, esse valor é o resultado do `try`.
+  - Se o bloco cair fora sem `return`, o resultado do `try` é `null`.
+  - `break` e `continue` dentro do bloco afetam o loop que contém o `try` (se aplicável).
+- Se o bloco causar erro, o `onerror` é executado como no caso da expressão.
+
+Exemplos:
+
+```js
+let x = try {
+    return 7
+} onerror {
+    return 0
+}
+print(x)  # 7
+```
+
+```js
+let x = try {
+    let a = 1
+} onerror {
+    return 0
+}
+print(x)  # null
+```
+
+```js
+use "arrays"
+let res = []
+for v in [1,2,3] {
+    let n = try {
+        if v == 1 { continue }
+        return v
+    } onerror { }
+    arrays.push(res, n)
+}
+print(res)  # [2, 3]
+
+
 ## Capturando a mensagem de erro
 
 Use `onerror(variável)` para receber a mensagem de erro:
