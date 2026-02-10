@@ -4,10 +4,26 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/iscarloscoder/fig/environment"
 )
+
+// step limit control (atomic)
+var stepLimitDisabled int32 = 0
+
+func DisableStepLimit() {
+	atomic.StoreInt32(&stepLimitDisabled, 1)
+}
+
+func EnableStepLimit() {
+	atomic.StoreInt32(&stepLimitDisabled, 0)
+}
+
+func IsStepLimitDisabled() bool {
+	return atomic.LoadInt32(&stepLimitDisabled) != 0
+}
 
 func init() {
 	register(newModule("system",
@@ -82,6 +98,58 @@ func init() {
 				result[i] = environment.NewString(a)
 			}
 			return environment.NewArray(result), nil
+		}),
+
+		// disableStepLimit() — disable evaluation step counting (process-wide)
+		fn("disableStepLimit", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 0 {
+				return environment.NewNil(), fmt.Errorf("disableStepLimit() expects 0 arguments")
+			}
+			DisableStepLimit()
+			return environment.NewNil(), nil
+		}),
+
+		// enableStepLimit() — re-enable evaluation step counting
+		fn("enableStepLimit", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 0 {
+				return environment.NewNil(), fmt.Errorf("enableStepLimit() expects 0 arguments")
+			}
+			EnableStepLimit()
+			return environment.NewNil(), nil
+		}),
+
+		// isStepLimitDisabled() -> boolean
+		fn("isStepLimitDisabled", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 0 {
+				return environment.NewNil(), fmt.Errorf("isStepLimitDisabled() expects 0 args")
+			}
+			return environment.NewBool(IsStepLimitDisabled()), nil
+		}),
+
+		// withoutStepLimit(fn) — execute fn with the step limit temporarily disabled
+		// Requires `task` module to be available so the function runs in interpreter goroutine.
+		fn("withoutStepLimit", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("withoutStepLimit() expects 1 argument: function")
+			}
+			if !isCallable(args[0]) {
+				return environment.NewNil(), fmt.Errorf("withoutStepLimit() argument must be a function")
+			}
+			if TaskSpawner == nil {
+				return environment.NewNil(), fmt.Errorf("withoutStepLimit() requires the 'task' module to be loaded")
+			}
+
+			cb := args[0]
+			resultCh := make(chan TaskResult, 1)
+			// set disabled, spawn, then wait and re-enable
+			DisableStepLimit()
+			TaskSpawner(cb, resultCh)
+			res := <-resultCh
+			EnableStepLimit()
+			if res.Err != nil {
+				return environment.NewNil(), res.Err
+			}
+			return res.Value, nil
 		}),
 
 		// argv() — script args injected by the CLI when running a script

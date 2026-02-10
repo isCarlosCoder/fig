@@ -114,6 +114,53 @@ if (erro) {
 }
 ```
 
+## Controle do limite de passos de avaliação (experimental)
+Para evitar loops acidentais o interpretador conta "passos" de avaliação e dispara um erro quando o número ultrapassa um limite (protege contra recursão infinita e *spin loops*). Em alguns cenários legítimos (laços pesados, operações de bulk) você pode optar por desabilitar temporariamente essa checagem — use com muito cuidado.
+
+- `system.disableStepLimit()` → null
+  - Desabilita globalmente a checagem de passos de avaliação (process-wide).
+
+- `system.enableStepLimit()` → null
+  - Restaura a checagem de passos.
+
+- `system.isStepLimitDisabled()` → boolean
+  - Retorna `true` se o limite está atualmente desabilitado.
+
+- `system.withoutStepLimit(fn)` → any
+  - Executa a função `fn` com a checagem de passos temporariamente desabilitada. **Requer** que o módulo `task` esteja carregado (para executar `fn` na goroutine do interpretador e preservar ambiente/semântica); se `task` não for carregado, a chamada retorna um erro.
+
+**Exemplo (desabilitar temporariamente):**
+
+```js
+use "system"
+# Opção simples (global):
+system.disableStepLimit()
+let i = 0
+while (i < 1000000) { i = i + 1 }
+system.enableStepLimit()
+print(i)
+```
+
+**Exemplo (wrapper seguro com task):**
+
+```js
+use "task"
+use "system"
+fn heavy() {
+    let i = 0
+    while (i < 1000000) { i = i + 1 }
+    return i
+}
+let r = system.withoutStepLimit(heavy)
+print(r)
+```
+
+> ⚠️ Atenção: uso responsável requerido
+>
+> - `disableStepLimit()` é process-wide: se usado inadvertidamente pode deixar sua aplicação presa em um loop sem proteção. Prefira `system.withoutStepLimit(fn)` quando possível, pois encapsula o escopo.
+> - Essas funções não criam timeouts; se `fn` entrar em loop infinito o processo ficará bloqueado — **evite** desabilitar o limite para código que possa não terminar.
+> - Documente e revise cuidadosamente o uso em código de produção. Recomenda-se usar apenas para operações determinísticas e bem testadas (bulk fills, migrações, cálculos intensivos que não dependem de I/O assíncrono).
+
 ## Exemplo: Benchmark simples
 
 ```js
@@ -135,13 +182,17 @@ print("Tempo: " + (fim - inicio) + "s")
 
 | Função               | Descrição                                    |
 |---------------------|-----------------------------------------------|
-| `system.now()`       | Timestamp Unix em milissegundos               |
-| `system.clock()`     | Tempo em segundos (alta precisão)             |
-| `system.sleep(ms)`   | Pausar por N milissegundos                    |
-| `system.env(name)`   | Variável de ambiente                          |
-| `system.args()`      | Argumentos do processo (`os.Args`)            |
-| `system.argv()`      | Argumentos do script (passados ao `fig run`)  |
-| `system.cwd()`       | Diretório de trabalho no momento da execução  |
-| `system.platform()`  | Nome do sistema operacional                   |
-| `system.version()`   | Versão da linguagem Fig                       |
-| `system.exit(code?)` | Encerrar o programa                           |
+| `system.now()`            | Timestamp Unix em milissegundos               |
+| `system.clock()`         | Tempo em segundos (alta precisão)             |
+| `system.sleep(ms)`       | Pausar por N milissegundos                    |
+| `system.env(name)`       | Variável de ambiente                          |
+| `system.args()`          | Argumentos do processo (`os.Args`)            |
+| `system.argv()`          | Argumentos do script (passados ao `fig run`)  |
+| `system.cwd()`           | Diretório de trabalho no momento da execução  |
+| `system.platform()`      | Nome do sistema operacional                   |
+| `system.version()`       | Versão da linguagem Fig                       |
+| `system.exit(code?)`     | Encerrar o programa                           |
+| `system.disableStepLimit()` | Desabilita globalmente a checagem de passos (experimental) |
+| `system.enableStepLimit()`  | Reabilita a checagem de passos (experimental) |
+| `system.isStepLimitDisabled()` | Retorna boolean indicando se o limite está desabilitado |
+| `system.withoutStepLimit(fn)`  | Executa `fn` com a checagem de passos desabilitada (requer `task`) |

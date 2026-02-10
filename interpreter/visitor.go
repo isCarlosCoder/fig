@@ -1220,11 +1220,13 @@ func (v *FigVisitor) VisitUnary(ctx *parser.UnaryContext) interface{} {
 
 func (v *FigVisitor) VisitPrimary(ctx *parser.PrimaryContext) interface{} {
 	// Debug: count evaluation steps and detect runaway recursion
-	v.evalSteps++
-	if v.evalSteps > 20000 {
-		// Too many evaluation steps: set a runtime error to avoid Go stack overflow
-		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "maximum evaluation steps exceeded - possible infinite recursion", 1)
-		return environment.NewNil()
+	if !builtins.IsStepLimitDisabled() {
+		v.evalSteps++
+		if v.evalSteps > 20000 {
+			// Too many evaluation steps: set a runtime error to avoid Go stack overflow
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "maximum evaluation steps exceeded - possible infinite recursion", 1)
+			return environment.NewNil()
+		}
 	}
 	if ctx.NUMBER() != nil {
 		s := ctx.NUMBER().GetText()
