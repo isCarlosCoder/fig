@@ -54,12 +54,13 @@ print(runtime.numCPU())  # ex: 8
 
 ```js
 use "runtime"
+use "arrays"
 
 let antes = runtime.memUsage()
 
 # ... alguma operação que usa memória ...
 let dados = []
-for i in range(0, 10000) {
+for i in range(0, 1000) {
     arrays.push(dados, i)
 }
 
