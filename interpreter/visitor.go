@@ -1372,14 +1372,32 @@ func (v *FigVisitor) VisitPrimary(ctx *parser.PrimaryContext) interface{} {
 // A 'return' inside onerror provides the fallback value for the expression.
 // A 'break'/'continue' inside onerror sets pendingLoopSignal for the enclosing loop.
 func (v *FigVisitor) VisitTryExpr(ctx *parser.TryExprContext) interface{} {
-	// Evaluate the guarded expression
-	val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
-
-	if v.RuntimeErr == nil {
-		// No error — return the value as-is
-		return val
+	// The guarded portion can be either an expression or a block (try expr | try { block }).
+	// Evaluate accordingly and if no runtime error occurs, return the result.
+	if ctx.Expr() != nil {
+		// Guarded is an expression
+		val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr == nil {
+			return val
+		}
+	} else {
+		// Guarded is a block: it may return a value via 'return' or fall through
+		guarded := ctx.Block(0).(*parser.BlockContext)
+		res := v.visitBlockRaw(guarded)
+		if v.RuntimeErr == nil {
+			// No runtime error inside the guarded block — if it returned via 'return', use that
+			if ret, ok := res.(returnSignal); ok {
+				return ret.value
+			}
+			if sig, ok := res.(loopSignal); ok {
+				v.pendingLoopSignal = sig
+				return environment.NewNil()
+			}
+			return environment.NewNil()
+		}
 	}
 
+	// At this point v.RuntimeErr != nil: handle the error using the onerror block
 	// Extract human-readable message from the error
 	var errMsg string
 	if re, ok := v.RuntimeErr.(*RuntimeError); ok {
@@ -1400,7 +1418,21 @@ func (v *FigVisitor) VisitTryExpr(ctx *parser.TryExprContext) interface{} {
 		v.env.Define(ctx.ID().GetText(), environment.NewString(errMsg))
 	}
 
-	result := v.visitBlockRaw(ctx.Block().(*parser.BlockContext))
+	// The onerror block is the last block in the context. If the guarded part was
+	// a block, there will be two block nodes (guarded, onerror); otherwise only
+	// the onerror block exists.
+	var onErrBlock *parser.BlockContext
+	blocks := ctx.AllBlock()
+	if len(blocks) == 0 {
+		// Should not happen per grammar, but be defensive
+		return environment.NewNil()
+	} else if len(blocks) == 1 {
+		onErrBlock = blocks[0].(*parser.BlockContext)
+	} else {
+		onErrBlock = blocks[1].(*parser.BlockContext)
+	}
+
+	result := v.visitBlockRaw(onErrBlock)
 
 	// If block returned via 'return', use its value as the fallback
 	if ret, ok := result.(returnSignal); ok {

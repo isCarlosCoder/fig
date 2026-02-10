@@ -162,7 +162,7 @@ primary
     ;
 
 tryExpr
-    : TK_TRY expr TK_ONERROR (LPAREN ID? RPAREN)? block
+    : TK_TRY (expr | block) TK_ONERROR (LPAREN ID? RPAREN)? block
     ;
 
 matchExpr

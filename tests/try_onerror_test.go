@@ -515,3 +515,120 @@ func TestTryInStructInitWithError(t *testing.T) {
 		t.Fatalf("expected '5\\n0', got %q", out)
 	}
 }
+
+// --- 27. Try with guarded block that returns ---
+
+func TestTryGuardedBlockReturn(t *testing.T) {
+	out, err := runFig(t, `
+		let x = try {
+			return 7
+		} onerror {
+			return 0
+		}
+		print(x)
+	`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "7" {
+		t.Fatalf("expected '7', got %q", out)
+	}
+}
+
+// --- 28. Try with guarded block that falls through (no return) gives null ---
+
+func TestTryGuardedBlockNoReturn(t *testing.T) {
+	out, err := runFig(t, `
+		let x = try {
+			let a = 1
+		} onerror {
+			return 0
+		}
+		print(x)
+	`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "null" {
+		t.Fatalf("expected 'null', got %q", out)
+	}
+}
+
+// --- 29. Try with guarded block that errors and uses onerror(e) ---
+
+func TestTryGuardedBlockErrorAndOnerror(t *testing.T) {
+	out, err := runFig(t, `
+		let x = try {
+			let y = 10 / 0
+		} onerror(e) {
+			print(e)
+			return 123
+		}
+		print(x)
+	`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	lines := strings.Split(out, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected 2 lines, got: %q", out)
+	}
+	if !strings.Contains(lines[0], "division by zero") {
+		t.Fatalf("expected error message about division by zero, got: %q", lines[0])
+	}
+	if lines[1] != "123" {
+		t.Fatalf("expected '123', got %q", lines[1])
+	}
+}
+
+// --- 30. Try with guarded block using continue in loop ---
+
+func TestTryGuardedBlockContinue(t *testing.T) {
+	out, err := runFig(t, `
+		use "arrays"
+		let results = []
+		let inputs = [1, 2, 3]
+		for x in inputs {
+			let n = try {
+				if x == 1 { continue }
+				return x
+			} onerror {
+				return -1
+			}
+			arrays.push(results, n)
+		}
+		print(results)
+	`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "[2, 3]" {
+		t.Fatalf("expected '[2, 3]', got %q", out)
+	}
+}
+
+// --- 31. Try with guarded block using break in loop ---
+
+func TestTryGuardedBlockBreak(t *testing.T) {
+	out, err := runFig(t, `
+		use "arrays"
+		let results = []
+		let inputs = [2, 4, 0, 8]
+		for x in inputs {
+			let n = try {
+				if x == 0 { break }
+				return 10 / x
+			} onerror {
+				return -1
+			}
+			arrays.push(results, n)
+		}
+		print(results)
+	`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "[5, 2.5]" {
+		t.Fatalf("expected '[5, 2.5]', got %q", out)
+	}
+}
