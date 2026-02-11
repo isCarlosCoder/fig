@@ -26,6 +26,13 @@ var termOldState *term.State
 var termFd int = -1
 var termSigCh chan os.Signal
 
+// writer used for output (testable). Default is os.Stdout but tests can override.
+var stdout io.Writer = os.Stdout
+
+// alternate screen tracking
+var altMu sync.Mutex
+var altOn bool
+
 // resize callback management
 var resizeMu sync.Mutex
 var resizeCb environment.Value
@@ -258,8 +265,8 @@ func init() {
 		// clear() -> clears the screen and moves cursor to origin
 		fn("clear", func(args []environment.Value) (environment.Value, error) {
 			seq := "\x1b[2J" + "\x1b[H"
-			// write directly to stdout
-			_, _ = os.Stdout.Write([]byte(seq))
+			// write directly to stdout (testable via `stdout` variable)
+			_, _ = stdout.Write([]byte(seq))
 			return environment.NewNil(), nil
 		}),
 
@@ -297,7 +304,7 @@ func init() {
 		fn("refresh", func(args []environment.Value) (environment.Value, error) {
 			bufferMu.Lock()
 			if screenBuf.Len() > 0 {
-				_, _ = os.Stdout.Write(screenBuf.Bytes())
+				_, _ = stdout.Write(screenBuf.Bytes())
 				screenBuf.Reset()
 			}
 			bufferMu.Unlock()
@@ -308,7 +315,7 @@ func init() {
 		fn("flush", func(args []environment.Value) (environment.Value, error) {
 			bufferMu.Lock()
 			if screenBuf.Len() > 0 {
-				_, _ = os.Stdout.Write(screenBuf.Bytes())
+				_, _ = stdout.Write(screenBuf.Bytes())
 				screenBuf.Reset()
 			}
 			bufferMu.Unlock()
@@ -534,7 +541,7 @@ func init() {
 			h := int(hVal.Num)
 			rows := *rowsVal.Arr
 			// Move to origin
-			_, _ = os.Stdout.Write([]byte("\x1b[H"))
+			_, _ = stdout.Write([]byte("\x1b[H"))
 			for i := 0; i < h && i < len(rows); i++ {
 				rowStr := ""
 				if rows[i].Type == environment.StringType {
@@ -547,7 +554,7 @@ func init() {
 					rowStr = rowStr[:w]
 				}
 				seq := fmt.Sprintf("\x1b[%d;1H%s", i+1, rowStr)
-				_, _ = os.Stdout.Write([]byte(seq))
+				_, _ = stdout.Write([]byte(seq))
 			}
 			return environment.NewNil(), nil
 		}),
@@ -627,14 +634,36 @@ func init() {
 		// hideCursor() -> hide the terminal cursor
 		fn("hideCursor", func(args []environment.Value) (environment.Value, error) {
 			// ANSI: CSI ? 25 l
-			_, _ = os.Stdout.Write([]byte("\x1b[?25l"))
+			_, _ = stdout.Write([]byte("\x1b[?25l"))
 			return environment.NewNil(), nil
 		}),
 
 		// showCursor() -> show the terminal cursor
 		fn("showCursor", func(args []environment.Value) (environment.Value, error) {
 			// ANSI: CSI ? 25 h
-			_, _ = os.Stdout.Write([]byte("\x1b[?25h"))
+			_, _ = stdout.Write([]byte("\x1b[?25h"))
+			return environment.NewNil(), nil
+		}),
+
+		// enterAltScreen() -> switch to alternate screen buffer (no scrollback)
+		fn("enterAltScreen", func(args []environment.Value) (environment.Value, error) {
+			altMu.Lock()
+			defer altMu.Unlock()
+			if !altOn {
+				_, _ = stdout.Write([]byte("\x1b[?1049h"))
+				altOn = true
+			}
+			return environment.NewNil(), nil
+		}),
+
+		// exitAltScreen() -> restore main screen buffer
+		fn("exitAltScreen", func(args []environment.Value) (environment.Value, error) {
+			altMu.Lock()
+			defer altMu.Unlock()
+			if altOn {
+				_, _ = stdout.Write([]byte("\x1b[?1049l"))
+				altOn = false
+			}
 			return environment.NewNil(), nil
 		}),
 
@@ -728,7 +757,7 @@ func init() {
 
 		// resetStyle() -> reset colors and attributes
 		fn("resetStyle", func(args []environment.Value) (environment.Value, error) {
-			_, _ = os.Stdout.Write([]byte("\x1b[0m"))
+			_, _ = stdout.Write([]byte("\x1b[0m"))
 			return environment.NewNil(), nil
 		}),
 
@@ -818,7 +847,7 @@ func init() {
 							go func() { <-resultCh }()
 						} else {
 							// TaskSpawner not available; notify on stdout
-							fmt.Fprintln(os.Stdout, "term.onResize: task module not loaded; callback not invoked")
+							fmt.Fprintln(stdout, "term.onResize: task module not loaded; callback not invoked")
 						}
 					}
 				}()
@@ -884,7 +913,7 @@ func init() {
 								TaskSpawner(cb, resultCh)
 								go func() { <-resultCh }()
 							} else {
-								fmt.Fprintln(os.Stdout, "term.onKey: task module not loaded; callback not invoked")
+								fmt.Fprintln(stdout, "term.onKey: task module not loaded; callback not invoked")
 							}
 						}
 						select {
@@ -909,9 +938,9 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("bold() argument must be boolean")
 			}
 			if b {
-				_, _ = os.Stdout.Write([]byte("\x1b[1m"))
+				_, _ = stdout.Write([]byte("\x1b[1m"))
 			} else {
-				_, _ = os.Stdout.Write([]byte("\x1b[22m"))
+				_, _ = stdout.Write([]byte("\x1b[22m"))
 			}
 			return environment.NewNil(), nil
 		}),
@@ -926,9 +955,9 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("underline() argument must be boolean")
 			}
 			if b {
-				_, _ = os.Stdout.Write([]byte("\x1b[4m"))
+				_, _ = stdout.Write([]byte("\x1b[4m"))
 			} else {
-				_, _ = os.Stdout.Write([]byte("\x1b[24m"))
+				_, _ = stdout.Write([]byte("\x1b[24m"))
 			}
 			return environment.NewNil(), nil
 		}),
@@ -943,9 +972,9 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("invert() argument must be boolean")
 			}
 			if b {
-				_, _ = os.Stdout.Write([]byte("\x1b[7m"))
+				_, _ = stdout.Write([]byte("\x1b[7m"))
 			} else {
-				_, _ = os.Stdout.Write([]byte("\x1b[27m"))
+				_, _ = stdout.Write([]byte("\x1b[27m"))
 			}
 			return environment.NewNil(), nil
 		}),

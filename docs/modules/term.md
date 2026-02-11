@@ -39,6 +39,16 @@ Retorna boolean indicando se há dados disponíveis sem consumir.
 
 ## Cursor e tela
 
+### Alternate screen buffer (no scrollback)
+
+Use `term.enterAltScreen()` to switch to the terminal's *alternate screen buffer* (CSI ?1049h). This is useful for full-screen UIs and drawing with `createBuffer`/`drawBuffer` since it prevents the terminal scrollback from containing intermediate frames. When finished, call `term.exitAltScreen()` to restore the main screen (CSI ?1049l).
+
+```js
+term.enterAltScreen()
+# draw loop
+term.exitAltScreen()
+```
+
 ### term.clear()
 Limpa a tela e move o cursor para (1,1).
 
