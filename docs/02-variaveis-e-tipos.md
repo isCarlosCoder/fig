@@ -41,6 +41,21 @@ Números inteiros e decimais são o mesmo tipo:
 let inteiro = 42
 let decimal = 3.14
 let negativo = -7
+
+```js
+# Notação científica (exponencial)
+# Suportada para números grandes/pequenos: `1e9`, `1.2e-3`, `2E2`, `1e+3`, `-1e3`
+let grande = 1e9
+let pequeno = 1.2e-3
+let comE = 2E2
+let comMais = 1e+3
+let negativoExp = -1e3
+print(grande)       # 1000000000
+print(pequeno)      # 0.0012
+print(comE)         # 200
+print(comMais)      # 1000
+print(negativoExp)  # -1000
+```
 ```
 
 Operações aritméticas retornam números:
