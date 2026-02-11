@@ -74,3 +74,36 @@ print(r)`
 		t.Fatalf("unexpected output: %q", out)
 	}
 }
+
+func TestDisableStepLimitReferenceCount(t *testing.T) {
+	// If the caller disables the step limit, a nested withoutStepLimit must not
+	// re-enable it on completion. This verifies the reference-counted behavior.
+	src := `use "task"
+use "system"
+print("start=" + system.isStepLimitDisabled())
+system.disableStepLimit()
+print("afterDisable=" + system.isStepLimitDisabled())
+fn heavy() { let i = 0; while (i < 30000) { i = i + 1 } return i }
+let r = system.withoutStepLimit(heavy)
+print("afterWithout=" + system.isStepLimitDisabled())
+print(r)
+system.enableStepLimit()
+print("afterEnabled=" + system.isStepLimitDisabled())`
+	out, err := runFig(t, src)
+	if err != nil {
+		t.Fatalf("unexpected error in nested disable test: %v", err)
+	}
+	// Be tolerant of extra parser/debug output; ensure expected pieces are present
+	if !strings.Contains(out, "afterDisable=true") {
+		t.Fatalf("expected afterDisable=true in output, got %q", out)
+	}
+	if !strings.Contains(out, "afterWithout=true") {
+		t.Fatalf("expected afterWithout=true in output, got %q", out)
+	}
+	if !strings.Contains(out, "30000") {
+		t.Fatalf("expected heavy return 30000 in output, got %q", out)
+	}
+	if !strings.Contains(out, "afterEnabled=false") {
+		t.Fatalf("expected afterEnabled=false in output, got %q", out)
+	}
+}

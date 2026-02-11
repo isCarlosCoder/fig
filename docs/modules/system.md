@@ -160,6 +160,36 @@ print(r)
 > - `disableStepLimit()` é process-wide: se usado inadvertidamente pode deixar sua aplicação presa em um loop sem proteção. Prefira `system.withoutStepLimit(fn)` quando possível, pois encapsula o escopo.
 > - Essas funções não criam timeouts; se `fn` entrar em loop infinito o processo ficará bloqueado — **evite** desabilitar o limite para código que possa não terminar.
 > - Documente e revise cuidadosamente o uso em código de produção. Recomenda-se usar apenas para operações determinísticas e bem testadas (bulk fills, migrações, cálculos intensivos que não dependem de I/O assíncrono).
+>
+## Comportamento detalhado: contagem por referência
+
+Para evitar que chamadas aninhadas ou bibliotecas interfiram no estado global, o `system.disableStepLimit()` agora é **referência-contada**: cada chamada incrementa um contador interno; `system.enableStepLimit()` decrements esse contador (sem permitir valor negativo). O limite de passos fica efetivamente desabilitado enquanto o contador for maior que zero.
+
+Isto corrige casos onde um módulo (por exemplo, uma biblioteca de treinamento) desabilita o limite globalmente e outro código chama `system.withoutStepLimit()` ou `system.disableStepLimit()` em aninhamento — o estado externo não será reativado acidentalmente até que todas as chamadas correspondentes a `disableStepLimit()` tenham sido equilibradas com `enableStepLimit()`.
+
+**Exemplo de uso e mecanismo esperado:**
+
+```js
+use "task"
+use "system"
+print("start=" + system.isStepLimitDisabled())       # start=false
+system.disableStepLimit()
+print("afterDisable=" + system.isStepLimitDisabled()) # afterDisable=true
+fn heavy() {
+    let i = 0
+    while (i < 30000) { i = i + 1 }
+    return i
+}
+let r = system.withoutStepLimit(heavy)
+print("afterWithout=" + system.isStepLimitDisabled()) # still true
+print(r)
+system.enableStepLimit()
+print("afterEnabled=" + system.isStepLimitDisabled()) # afterEnabled=false
+```
+
+Um teste cobre esse comportamento: `tests/builtins_system_step_limit_test.go` → `TestDisableStepLimitReferenceCount`.
+
+> 💡 Dica: `system.withoutStepLimit(fn)` continua sendo a forma mais segura para permitir exceções temporárias ao limite (requer `task` e garante escopo delimitado).
 
 ## Exemplo: Benchmark simples
 

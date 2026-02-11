@@ -10,19 +10,30 @@ import (
 	"github.com/iscarloscoder/fig/environment"
 )
 
-// step limit control (atomic)
-var stepLimitDisabled int32 = 0
+// step limit control (reference-counted atomic)
+// Use a counter so nested or library calls to enable/disable do not
+// accidentally override prior caller intent.
+var stepLimitDisableCount int32 = 0
 
 func DisableStepLimit() {
-	atomic.StoreInt32(&stepLimitDisabled, 1)
+	atomic.AddInt32(&stepLimitDisableCount, 1)
 }
 
 func EnableStepLimit() {
-	atomic.StoreInt32(&stepLimitDisabled, 0)
+	// decrement but never below zero
+	for {
+		cur := atomic.LoadInt32(&stepLimitDisableCount)
+		if cur == 0 {
+			return
+		}
+		if atomic.CompareAndSwapInt32(&stepLimitDisableCount, cur, cur-1) {
+			return
+		}
+	}
 }
 
 func IsStepLimitDisabled() bool {
-	return atomic.LoadInt32(&stepLimitDisabled) != 0
+	return atomic.LoadInt32(&stepLimitDisableCount) > 0
 }
 
 func init() {
