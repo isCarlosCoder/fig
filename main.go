@@ -2,9 +2,11 @@ package main
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -94,7 +96,13 @@ func main() {
 			} else {
 				hasErr := false
 				for _, mod := range mods {
-					if err := installModule(mod, os.Stdout, os.Stderr); err != nil {
+					// Reject explicit owner/repo forms; only aliases allowed
+					if strings.Contains(mod, "/") {
+						fmt.Fprintf(os.Stderr, "invalid module spec '%s': expected alias name (no '/'),\n", mod)
+						hasErr = true
+						continue
+					}
+					if err := installAlias(mod, os.Stdout, os.Stderr); err != nil {
 						hasErr = true
 					}
 				}
@@ -115,12 +123,17 @@ func main() {
 				}
 			}
 			if len(mods) == 0 {
-				fmt.Fprintln(os.Stderr, "remove requires at least one module argument (owner/repo)")
+				fmt.Fprintln(os.Stderr, "remove requires at least one module argument (alias)")
 				os.Exit(1)
 			}
 			hasErr := false
 			for _, mod := range mods {
-				if err := removeModule(mod, force, os.Stdout, os.Stderr); err != nil {
+				if strings.Contains(mod, "/") {
+					fmt.Fprintf(os.Stderr, "invalid module spec '%s': expected alias name (no '/'),\n", mod)
+					hasErr = true
+					continue
+				}
+				if err := removeByAlias(mod, force, os.Stdout, os.Stderr); err != nil {
 					hasErr = true
 				}
 			}
@@ -398,7 +411,7 @@ func installFromToml(out io.Writer, errOut io.Writer) error {
 		}
 
 		mod := owner + "/" + repo
-		if err := installModule(mod, out, errOut); err != nil {
+		if err := installModule(mod, "", out, errOut); err != nil {
 			hasErr = true
 			continue
 		}
@@ -415,7 +428,8 @@ func installFromToml(out io.Writer, errOut io.Writer) error {
 	return nil
 }
 
-func installModule(mod string, out io.Writer, errOut io.Writer) error {
+func installModule(mod string, alias string, out io.Writer, errOut io.Writer) error {
+	// mod is expected to be owner/repo
 	owner, repo, err := parseModuleSpec(mod)
 	if err != nil {
 		fmt.Fprintf(errOut, "invalid module: %v\n", err)
@@ -444,7 +458,12 @@ func installModule(mod string, out io.Writer, errOut io.Writer) error {
 		return err
 	}
 
-	zipURL := fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/main.zip", owner, repo)
+	// Allow overriding the GitHub host for tests via GITHUB_BASE env var
+	githubBase := os.Getenv("GITHUB_BASE")
+	if githubBase == "" {
+		githubBase = "https://github.com"
+	}
+	zipURL := fmt.Sprintf("%s/%s/%s/archive/refs/heads/main.zip", githubBase, owner, repo)
 	tmpZip, err := downloadZip(zipURL)
 	if err != nil {
 		fmt.Fprintf(errOut, "cannot download module: %v\n", err)
@@ -482,6 +501,7 @@ func installModule(mod string, out io.Writer, errOut io.Writer) error {
 		Version:  depVersion,
 		Source:   fmt.Sprintf("github.com/%s/%s", owner, repo),
 		Location: filepath.ToSlash(filepath.Join("_modules", repo)),
+		Alias:    alias,
 	}
 
 	encoded, err := toml.Marshal(projCfg)
@@ -496,6 +516,76 @@ func installModule(mod string, out io.Writer, errOut io.Writer) error {
 
 	fmt.Fprintf(out, "Installed %s/%s (%s)\n", owner, repo, depVersion)
 	return nil
+}
+
+// resolveAlias looks up an alias in the configured registry and returns owner/repo
+func resolveAlias(alias string) (string, string, error) {
+	base := os.Getenv("FIGREPO_BASE")
+	if base == "" {
+		base = "https://figrepo.vercel.app"
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid FIGREPO_BASE: %v", err)
+	}
+	u.Path = "/api/resolve"
+	q := u.Query()
+	q.Set("alias", alias)
+	u.RawQuery = q.Encode()
+
+	resp, err := http.Get(u.String())
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return "", "", fmt.Errorf("alias not found: %s", alias)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("bad status from registry: %s", resp.Status)
+	}
+	var body struct {
+		Ok      bool `json:"ok"`
+		Package struct {
+			RepoFullName string `json:"repo_full_name"`
+		} `json:"package"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", "", err
+	}
+	if !body.Ok || body.Package.RepoFullName == "" {
+		return "", "", fmt.Errorf("alias not found: %s", alias)
+	}
+	parts := strings.Split(body.Package.RepoFullName, "/")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid repo name from registry: %s", body.Package.RepoFullName)
+	}
+	return parts[0], parts[1], nil
+}
+
+func installAlias(alias string, out io.Writer, errOut io.Writer) error {
+	owner, repo, err := resolveAlias(alias)
+	if err != nil {
+		fmt.Fprintf(errOut, "cannot resolve alias: %v\n", err)
+		return err
+	}
+	mod := owner + "/" + repo
+	// Proceed to install and record alias in fig.toml
+	if err := installModule(mod, alias, out, errOut); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "Installed %s (%s) via alias '%s'\n", mod, alias, alias)
+	return nil
+}
+
+func removeByAlias(alias string, force bool, out io.Writer, errOut io.Writer) error {
+	owner, repo, err := resolveAlias(alias)
+	if err != nil {
+		fmt.Fprintf(errOut, "cannot resolve alias: %v\n", err)
+		return err
+	}
+	mod := owner + "/" + repo
+	return removeModule(mod, force, out, errOut)
 }
 
 func removeModule(mod string, force bool, out io.Writer, errOut io.Writer) error {
@@ -870,6 +960,7 @@ type figDependencyConfig struct {
 	Version  string `toml:"version"`
 	Source   string `toml:"source"`
 	Location string `toml:"location"`
+	Alias    string `toml:"alias,omitempty"`
 }
 
 type moduleTomlConfig struct {

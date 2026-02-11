@@ -61,21 +61,8 @@ _modules/
 
 ## 5) Teste localmente
 
-Crie um projeto de teste em outro diretorio e instale seu modulo:
+- Não disponivel no momento.
 
-```bash
-fig init ../teste-modulo
-cd ../teste-modulo
-fig install seu-usuario/minha-biblioteca
-```
-
-Teste o import:
-
-```js
-import "mod:seu-usuario/minha-biblioteca" lib
-print(lib.hello("Fig"))
-print(lib.answer)
-```
 
 ## 6) Publique no GitHub
 
@@ -86,24 +73,29 @@ git init
 git add .
 git commit -m "Inicializa modulo Fig"
 git branch -M main
-git remote add origin https://github.com/seu-usuario/minha-biblioteca.git
+git remote add origin https://github.com/<seu-usuario>/<seu-repo>.git
 git push -u origin main
 ```
 
-## 7) Como usuarios vao instalar
+## 7) Como usuários vão instalar
 
-Depois de publicado, qualquer projeto Fig pode instalar:
+Depois de publicado e registrado no FigRepo com um alias, qualquer projeto Fig pode instalar usando o alias:
 
 ```bash
-fig install seu-usuario/minha-biblioteca
+fig install minha-biblioteca
 ```
 
-E importar com:
+E importar com o alias registrado no `mod:`:
 
 ```js
-import "mod:seu-usuario/minha-biblioteca" lib
+import "mod:minha-biblioteca" lib
 ```
 
+> Nota: o `fig install` depende da existência do alias no registry. Se o alias não estiver registrado, o CLI retornará erro — não há fallback automático.
+
+### Importando pelo alias
+
+Ao registrar um alias no FigRepo, usuários poderão instalar seu módulo usando `fig install <alias>` e importar no código com `import "mod:<alias>"`. Esta é a forma recomendada porque deixa explícito o nome público do pacote independente do owner/repo do GitHub.
 ## Dicas
 
 - Use nomes simples e consistentes para funcoes e variaveis.

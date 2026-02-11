@@ -41,26 +41,31 @@ print(subtrair(10, 4))  # 6
 
 ### Importando módulos externos
 
-Para módulos instalados em `_modules`, use o prefixo `mod:`:
+Para módulos instalados em `_modules`, use o prefixo `mod:`. Recomendamos **importar pelo alias** registrado no FigRepo:
 
 ```js
-import "mod:isCarlosCoder/myfigtestdependency"
+import "mod:myfigtestdependency"
 print(myfigtestdependency.magic)
 ```
 
-Você pode definir um alias:
+Você também pode nomear o import com um identificador local:
 
 ```js
-import "mod:isCarlosCoder/myfigtestdependency" lib
+import "mod:myfigtestdependency" lib
 print(lib.hello("Fig"))
 ```
 
-> Para instalar um módulo, use `fig install <owner>/<repo>` no diretório do projeto.
-> Para instalar vários de uma vez: `fig install owner/x owner/y`.
+Nota: a forma preferida para importar módulos é `mod:<alias>` (onde `<alias>` é o nome registrado no FigRepo).
+> Para instalar um módulo registrado no FigRepo, use `fig install <alias>` no diretório do projeto. O comando resolve o alias no registry (`FIGREPO_BASE`, por padrão `https://figrepo.vercel.app`) e instala o repositório correspondente.
+>
+> Exemplo: `fig install logger`
+>
+> Para instalar vários de uma vez: `fig install logger color-tools`.
+>
 > Para sincronizar dependências do `fig.toml` (útil após clonar): `fig install` (sem argumentos).
 
-> Para remover um módulo: `fig remove owner/repo`.
-> Para remover vários de uma vez: `fig remove owner/x owner/y`.
+> Para remover um módulo instalado, use `fig remove <alias>`. Por exemplo: `fig remove logger`.
+> Para remover vários de uma vez: `fig remove a b`.
 > Se outro módulo depender do que está sendo removido, o comando será bloqueado. Use `--force` para forçar.
 
 > Dependências transitivas são resolvidas no `_modules/` do projeto raiz. Módulos externos não carregam um `_modules` próprio.
@@ -151,9 +156,9 @@ print(strings.contains("abc", "b"))  # true
 | Aspecto     | `import "mod:..."`            |
 |------------|--------------------------------|
 | Carrega     | Módulo externo instalado        |
-| Caminho     | `mod:<owner>/<repo>`            |
+| Caminho     | `mod:package`            |
 | Acesso      | Via nome do módulo ou alias     |
-| Sintaxe     | `import "mod:owner/repo" alias` |
+| Sintaxe     | `import "mod:package" alias` |
 
 ---
 
