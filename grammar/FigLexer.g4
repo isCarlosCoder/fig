@@ -65,7 +65,7 @@ RBRACE: '}' ;
 // Literals and other tokens
 BOOL: 'true' | 'false' ;
 ID: (LETTER | '_') (LETTER | DIGIT | '_')* ;
-NUMBER: DIGIT+ ('.' DIGIT+)? ;
+NUMBER: DIGIT+ ('.' DIGIT+)? ([eE] [+-]? DIGIT+)? ;
 STRING: '"' (ESC | ~["\\])* '"' | '\'' (ESC | ~['\\])* '\'' ;
 
 // Skip whitespace and comments
