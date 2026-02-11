@@ -1,2 +1,2 @@
 import "stack_module"
-bad()
+stack_module.bad()

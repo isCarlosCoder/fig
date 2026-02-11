@@ -48,7 +48,7 @@ func runFigFile(t *testing.T, name string) (string, error) {
 
 func TestImportBasicFunction(t *testing.T) {
 	src := `import "math_utils"
-print(soma(2, 3));`
+print(math_utils.soma(2, 3));`
 	out, err := runFigSource(t, src)
 	if err != nil {
 		t.Fatalf("runtime error: %v", err)
@@ -60,7 +60,7 @@ print(soma(2, 3));`
 
 func TestImportVariable(t *testing.T) {
 	src := `import "math_utils"
-print(PI);`
+print(math_utils.PI);`
 	out, err := runFigSource(t, src)
 	if err != nil {
 		t.Fatalf("runtime error: %v", err)
@@ -73,8 +73,8 @@ print(PI);`
 func TestImportMultipleModules(t *testing.T) {
 	src := `import "math_utils"
 import "greet"
-print(soma(10, 20));
-print(saudar("Fig"));`
+print(math_utils.soma(10, 20));
+print(greet.saudar("Fig"));`
 	out, err := runFigSource(t, src)
 	if err != nil {
 		t.Fatalf("runtime error: %v", err)
@@ -87,7 +87,7 @@ print(saudar("Fig"));`
 
 func TestImportTransitive(t *testing.T) {
 	src := `import "transitive"
-print(dobro(7));`
+print(transitive.dobro(7));`
 	out, err := runFigSource(t, src)
 	if err != nil {
 		t.Fatalf("runtime error: %v", err)
@@ -98,8 +98,8 @@ print(dobro(7));`
 }
 
 func TestImportTransitiveFunctionAvailable(t *testing.T) {
-	src := `import "transitive"
-print(mult(3, 4));`
+	src := `import "math_utils"
+print(math_utils.mult(3, 4));`
 	out, err := runFigSource(t, src)
 	if err != nil {
 		t.Fatalf("runtime error: %v", err)
@@ -111,7 +111,7 @@ print(mult(3, 4));`
 
 func TestImportWithExtension(t *testing.T) {
 	src := `import "with_extension.fig"
-print(imported);`
+print(with_extension.imported);`
 	out, err := runFigSource(t, src)
 	if err != nil {
 		t.Fatalf("runtime error: %v", err)
@@ -123,7 +123,7 @@ print(imported);`
 
 func TestImportCircularDoesNotLoop(t *testing.T) {
 	src := `import "circular_a"
-print(fromA);`
+print(circular_a.fromA);`
 	out, err := runFigSource(t, src)
 	if err != nil {
 		t.Fatalf("runtime error: %v", err)
@@ -144,7 +144,7 @@ func TestImportNonexistentFile(t *testing.T) {
 func TestImportIdempotent(t *testing.T) {
 	src := `import "math_utils"
 import "math_utils"
-print(soma(1, 1));`
+print(math_utils.soma(1, 1));`
 	out, err := runFigSource(t, src)
 	if err != nil {
 		t.Fatalf("runtime error: %v", err)
@@ -154,9 +154,41 @@ print(soma(1, 1));`
 	}
 }
 
+func TestImportLocalAlias(t *testing.T) {
+	src := `import "math_utils" utils
+print(utils.soma(2, 3));`
+	out, err := runFigSource(t, src)
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "5" {
+		t.Fatalf("expected '5', got %q", out)
+	}
+}
+
+func TestImportLocalAliasWithSubdirFromRoot(t *testing.T) {
+	out, err := runFigFile(t, "main_using_src.fig")
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "5" {
+		t.Fatalf("expected '5', got %q", out)
+	}
+}
+
+func TestImportLocalAliasWithSubdirFromInside(t *testing.T) {
+	out, err := runFigFile(t, "src/main_inside.fig")
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "9" {
+		t.Fatalf("expected '9', got %q", out)
+	}
+}
+
 func TestImportUsesmath(t *testing.T) {
 	src := `import "uses_math"
-print(quadrado(5));`
+print(uses_math.quadrado(5));`
 	out, err := runFigSource(t, src)
 	if err != nil {
 		t.Fatalf("runtime error: %v", err)

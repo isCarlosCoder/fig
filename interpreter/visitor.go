@@ -458,10 +458,13 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 		return nil
 	}
 
-	if alias != "" {
-		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
-			"import alias is only supported for mod: imports", len(raw))
-		return nil
+	// Allow optional alias for local imports; if not provided derive from filename
+	var localAlias string
+	if ctx.ID() != nil {
+		localAlias = ctx.ID().GetText()
+	} else {
+		// derive base name without extension
+		localAlias = strings.TrimSuffix(filepath.Base(modPath), filepath.Ext(modPath))
 	}
 
 	// Append .fig extension if not present
@@ -475,6 +478,16 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 		resolved = filepath.Join(v.baseDir, modPath)
 	}
 	resolved = filepath.Clean(resolved)
+
+	// If the resolved path does not exist, and we have a project root, try resolving
+	// the path relative to the project root (handles cases like importing "src/x.fig"
+	// from within files that are already inside "src/").
+	if _, statErr := os.Stat(resolved); os.IsNotExist(statErr) && v.projectRoot != "" {
+		alt := filepath.Join(v.projectRoot, modPath)
+		if _, altErr := os.Stat(alt); altErr == nil {
+			resolved = alt
+		}
+	}
 
 	// Absolute path for dedup
 	absPath, err := filepath.Abs(resolved)
@@ -534,18 +547,19 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 		return nil
 	}
 
-	// Execute the imported file in the current environment
+	// Execute the imported file in its own module environment and expose it as an object
 	// Save and restore visitor state
 	prevSrcLines := v.srcLines
 	prevBaseDir := v.baseDir
 	prevEnv := v.env
 	prevCurrentFile := v.currentFile
 
+	moduleEnv := environment.NewEnv(v.env)
+	v.env = moduleEnv
 	v.srcLines = strings.Split(source, "\n")
 	v.baseDir = filepath.Dir(absPath)
 	v.currentFile = absPath
 
-	// Visit all statements from the imported program directly
 	progCtx := tree.(*parser.ProgramContext)
 	// push a module frame so runtime errors show the imported file in the stack
 	v.pushFrame("module", filepath.Base(absPath), absPath, 1, 0)
@@ -562,6 +576,18 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 	v.baseDir = prevBaseDir
 	v.env = prevEnv
 	v.currentFile = prevCurrentFile
+
+	if v.RuntimeErr != nil {
+		return nil
+	}
+
+	entries, keys := moduleEnv.Snapshot()
+	moduleObj := environment.NewObject(entries, keys)
+	// define using localAlias (derived above)
+	if err := v.env.Define(localAlias, moduleObj); err != nil {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(localAlias))
+		return nil
+	}
 
 	return nil
 }
@@ -588,6 +614,33 @@ func (v *FigVisitor) importModule(modPath, alias string, ctx *parser.ImportStmtC
 		alias = moduleName
 	}
 	moduleDir := filepath.Join(projectRoot, "_modules", moduleName)
+	// If the module directory is not present, try resolving by alias from the project's fig.toml
+	if _, statErr := os.Stat(moduleDir); os.IsNotExist(statErr) {
+		projectTomlPath := filepath.Join(projectRoot, "fig.toml")
+		deps, err := loadProjectDeps(projectTomlPath)
+		if err != nil {
+			return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+				fmt.Sprintf("cannot read project fig.toml: %v", err), len(modPath))
+		}
+		found := false
+		for _, dep := range deps {
+			if dep.Alias == moduleSpec || filepath.Base(dep.Location) == moduleSpec {
+				if dep.Location != "" {
+					moduleName = filepath.Base(dep.Location)
+				} else if dep.Source != "" {
+					parts := strings.Split(dep.Source, "/")
+					moduleName = parts[len(parts)-1]
+				}
+				moduleDir = filepath.Join(projectRoot, "_modules", moduleName)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+				fmt.Sprintf("module not installed: %s", moduleSpec), len(modPath))
+		}
+	}
 	moduleTomlPath := filepath.Join(moduleDir, "fig.toml")
 	modCfg, err := loadModuleToml(moduleTomlPath)
 	if err != nil {
@@ -730,6 +783,36 @@ func findProjectTomlFrom(startDir string) (string, error) {
 		}
 		dir = parent
 	}
+}
+
+// projectDependency represents a single dependency entry in a project's fig.toml.
+// This mirrors the structure used by the CLI but is scoped to the interpreter package.
+type projectDependency struct {
+	Version  string `toml:"version"`
+	Source   string `toml:"source"`
+	Location string `toml:"location"`
+	Alias    string `toml:"alias,omitempty"`
+}
+
+func loadProjectDeps(path string) ([]projectDependency, error) {
+	var cfg struct {
+		Deps map[string]projectDependency `toml:"dependencies"`
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := toml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+	deps := make([]projectDependency, 0, len(cfg.Deps))
+	for name, dep := range cfg.Deps {
+		if dep.Alias == "" {
+			dep.Alias = name
+		}
+		deps = append(deps, dep)
+	}
+	return deps, nil
 }
 
 func (v *FigVisitor) VisitExprStmt(ctx *parser.ExprStmtContext) interface{} {

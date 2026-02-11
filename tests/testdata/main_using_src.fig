@@ -1,0 +1,3 @@
+import "src/utils.fig" ut
+
+print(ut.soma(2, 3));

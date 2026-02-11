@@ -10,7 +10,7 @@ Fig possui dois mecanismos de importação:
 
 ## import — importando arquivos .fig
 
-Use `import` para executar outro arquivo `.fig`. O caminho é relativo ao arquivo atual:
+Use `import` para executar outro arquivo `.fig`. O arquivo importado é executado em um *ambiente de módulo* isolado e o conjunto de funções/variáveis exportadas fica disponível como um **objeto de módulo**. Acessar membros do módulo é feito via `modulo.membro()`.
 
 ```js
 # arquivo: matematica.fig
@@ -25,19 +25,24 @@ fn subtrair(a, b) {
 
 ```js
 # arquivo: main.fig
-import "matematica.fig"
+# fornecemos um alias local (opcional) para o módulo
+import "matematica.fig" mat
 
-print(somar(3, 5))     # 8
-print(subtrair(10, 4))  # 6
+print(mat.somar(3, 5))     # 8
+print(mat.subtrair(10, 4)) # 6
 ```
+
+Se nenhum alias for informado, o interpretador derivará um nome de módulo a partir do nome do arquivo (por exemplo, `matematica.fig` → `matematica`).
 
 ### Regras do import
 
 - O caminho é uma **string** com o caminho relativo do arquivo
-- O arquivo importado é **executado** no escopo do importador
-- Todas as funções e variáveis declaradas ficam disponíveis
+- O arquivo importado é **executado** em seu próprio ambiente de módulo
+- As funções e variáveis declaradas ficam disponíveis como propriedades do objeto do módulo (ex.: `matematica.somar()`)
+- Você pode fornecer um alias opcional: `import "arquivo.fig" alias`
 - A extensão `.fig` é opcional
 - O import é resolvido em tempo de execução
+- Se um import relativo não for encontrado no diretório do arquivo atual, o interpretador tentará resolver o caminho relativo ao diretório do projeto (quando aplicável), tornando imports como `src/utils.fig` mais tolerantes em diferentes locais do projeto
 
 ### Importando módulos externos
 
@@ -84,10 +89,10 @@ meu-projeto/
 
 ```js
 # main.fig
-import "utils/helpers.fig"
-import "utils/validadores.fig"
+import "utils/helpers.fig" helpers
+import "utils/validadores.fig" validators
+print(helpers.someHelper())
 ```
-
 ---
 
 ## use — importando módulos embutidos
@@ -144,12 +149,12 @@ print(strings.contains("abc", "b"))  # true
 
 ## Diferença entre `import` e `use`
 
-| Aspecto     | `import`                       | `use`                          |
-|------------|--------------------------------|--------------------------------|
-| Carrega     | Arquivo `.fig` do usuário      | Módulo embutido (builtin)      |
-| Caminho     | Relativo ao arquivo atual      | Nome do módulo (string)        |
-| Acesso      | Direto (funções ficam no escopo)| Via prefixo `módulo.função()`  |
-| Sintaxe     | `import "caminho/arquivo.fig"` | `use "nomeDoModulo"`           |
+| Aspecto     | `import`                                  | `use`                          |
+|------------|-------------------------------------------|--------------------------------|
+| Carrega     | Arquivo `.fig` do usuário                 | Módulo embutido (builtin)      |
+| Caminho     | Relativo ao arquivo atual                 | Nome do módulo (string)        |
+| Acesso      | Via objeto de módulo (`modulo.membro()`)  | Via prefixo `módulo.função()`  |
+| Sintaxe     | `import "caminho/arquivo.fig"`           | `use "nomeDoModulo"`         |
 
 ### Import externo (mod)
 

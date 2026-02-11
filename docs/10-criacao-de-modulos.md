@@ -37,7 +37,7 @@ name = "Seu Nome"
 
 ## 3) Escreva o codigo do modulo
 
-Coloque as funcoes e variaveis exportadas em `src/main.fig`:
+Coloque as funções e variáveis exportadas em `src/main.fig`:
 
 ```js
 fn hello(name) {
@@ -47,7 +47,13 @@ fn hello(name) {
 let answer = 42
 ```
 
-Esses nomes ficam disponiveis para quem importar o modulo.
+Quando um projeto importa o módulo, seu conteúdo será acessível através de um **objeto de módulo**. Por exemplo:
+
+```js
+import "mod:minha-biblioteca" lib
+print(lib.hello("Fig"))
+print(lib.answer)
+```
 
 ## 4) Garanta o .gitignore
 

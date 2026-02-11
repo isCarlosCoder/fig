@@ -62,7 +62,9 @@ Sempre declare importações no topo do arquivo, seguidas de `use`, e depois o c
 
 ```js
 # 1. imports de arquivos e módulos externos
-import "utils/helpers.fig"
+# Import local: cria um objeto de módulo (alias opcional)
+import "utils/helpers.fig" utils
+# Import externo (mod:) mantém o alias
 import "mod:logger" log
 
 # 2. módulos embutidos

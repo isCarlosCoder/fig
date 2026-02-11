@@ -2,5 +2,5 @@
 import "math_utils"
 
 fn dobro(x) {
-  return mult(x, 2);
+  return math_utils.mult(x, 2);
 }
