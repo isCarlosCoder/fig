@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -29,6 +30,7 @@ func printHelp(out io.Writer) {
 	fmt.Fprintln(out, "  fig init <dir>      Create a new Fig project")
 	fmt.Fprintln(out, "  fig install [mods]  Install modules (no args = sync from fig.toml)")
 	fmt.Fprintln(out, "  fig remove <mods>   Remove installed modules (--force to skip dependency check)")
+	fmt.Fprintln(out, "  fig setup-ffi       Setup FFI (Foreign Function Interface) for modules")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Flags:")
 	fmt.Fprintln(out, "  -h, --help          Show this help")
@@ -1005,10 +1007,29 @@ func setupFFI(out io.Writer, errOut io.Writer) error {
 		cfg.Deps = map[string]figDependencyConfig{}
 	}
 
-	// enable ffi and set default helper path if empty
+	// default helper path (local to project) if empty
+	defaultHelper := filepath.Join(projectRoot, ".fig", "ffi", "ffi-helper")
 	if cfg.Ffi.Helper == "" {
-		cfg.Ffi.Helper = filepath.Join(projectRoot, ".fig", "ffi", "ffi-helper")
+		cfg.Ffi.Helper = defaultHelper
 	}
+
+	// If a global `ffi-helper` is available in PATH, prefer and record its absolute path
+	if lp, err := exec.LookPath("ffi-helper"); err == nil {
+		if abs, aerr := filepath.Abs(lp); aerr == nil {
+			cfg.Ffi.Helper = abs
+		}
+		fmt.Fprintf(out, "Found global 'ffi-helper' at %s — configuring fig.toml to use it\n", cfg.Ffi.Helper)
+	} else {
+		fmt.Fprintln(out, "FFI helper not found in your PATH.")
+		fmt.Fprintln(out, "To compile and install the helper globally, run:")
+		fmt.Fprintln(out, "  cd tools/ffi-helper && go build -o ffi-helper .")
+		fmt.Fprintln(out, "  sudo mv ffi-helper /usr/local/bin/   # or mv to $HOME/.local/bin and add to PATH")
+		fmt.Fprintln(out)
+		fmt.Fprintf(out, "Or build the helper into this project and keep it local: %s\n", defaultHelper)
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "See: https://github.com/isCarlosCoder/fig/docs/ffi/setup.md")
+	}
+
 	cfg.Ffi.Enabled = true
 
 	b, err := toml.Marshal(cfg)
