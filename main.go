@@ -157,6 +157,13 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "setup-ffi":
+			// setup-ffi: initialize FFI helper in the project (creates .fig/ffi and updates fig.toml)
+			if err := setupFFI(os.Stdout, os.Stderr); err != nil {
+				fmt.Fprintf(os.Stderr, "setup-ffi failed: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		default:
 			// allow running a file directly: fig <file>
 			if isFigFile(s) {
@@ -942,6 +949,7 @@ type figTomlConfig struct {
 	Project figProjectConfig               `toml:"project"`
 	Authors figAuthorsConfig               `toml:"authors"`
 	Deps    map[string]figDependencyConfig `toml:"dependencies"`
+	Ffi     figFfiConfig                   `toml:"ffi,omitempty"`
 }
 
 type figProjectConfig struct {
@@ -971,4 +979,55 @@ type moduleProjectConfig struct {
 	Name    string `toml:"name"`
 	Version string `toml:"version"`
 	Main    string `toml:"main"`
+}
+type figFfiConfig struct {
+	Enabled   bool     `toml:"enabled,omitempty"`
+	Helper    string   `toml:"helper,omitempty"`
+	Whitelist []string `toml:"whitelist,omitempty"`
+}
+
+func setupFFI(out io.Writer, errOut io.Writer) error {
+	projectToml, err := findProjectToml()
+	if err != nil {
+		fmt.Fprintln(errOut, "fig.toml not found in current directory")
+		return err
+	}
+	projectRoot := filepath.Dir(projectToml)
+
+	cfg, err := loadProjectToml(projectToml)
+	if err != nil {
+		fmt.Fprintf(errOut, "cannot read fig.toml: %v\n", err)
+		return err
+	}
+
+	// set defaults
+	if cfg.Deps == nil {
+		cfg.Deps = map[string]figDependencyConfig{}
+	}
+
+	// enable ffi and set default helper path if empty
+	if cfg.Ffi.Helper == "" {
+		cfg.Ffi.Helper = filepath.Join(projectRoot, ".fig", "ffi", "ffi-helper")
+	}
+	cfg.Ffi.Enabled = true
+
+	b, err := toml.Marshal(cfg)
+	if err != nil {
+		fmt.Fprintf(errOut, "cannot serialize fig.toml: %v\n", err)
+		return err
+	}
+	if err := os.WriteFile(projectToml, b, 0644); err != nil {
+		fmt.Fprintf(errOut, "cannot write fig.toml: %v\n", err)
+		return err
+	}
+
+	// create .fig/ffi dir
+	ffiDir := filepath.Join(projectRoot, ".fig", "ffi")
+	if err := os.MkdirAll(ffiDir, 0755); err != nil {
+		fmt.Fprintf(errOut, "cannot create %s: %v\n", ffiDir, err)
+		return err
+	}
+
+	fmt.Fprintf(out, "FFI enabled; helper path: %s\n", cfg.Ffi.Helper)
+	return nil
 }
