@@ -212,3 +212,85 @@ func TestFfiStressCallbackStorm(t *testing.T) {
 		}
 	}
 }
+
+// TestFfiStressNoMemoryLeakOnRepeatedLoadSym exercises the fix for defer C.free()
+// inside the helper's request loop. Before the fix, C.CString allocations from
+// load and sym commands were deferred until serve() returned, causing unbounded
+// memory growth. This test sends 500 sequential load+sym+call cycles to verify
+// the helper stays stable.
+func TestFfiStressNoMemoryLeakOnRepeatedLoadSym(t *testing.T) {
+	builtins.StopAllHelpers()
+	root := findRepoRoot(t)
+
+	binDir := t.TempDir()
+	bin := filepath.Join(binDir, "ffi-helper")
+	cmd := exec.Command("go", "build", "-o", bin, "./tools/ffi-helper")
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build helper: %v (%s)", err, string(out))
+	}
+
+	libDir := t.TempDir()
+	libPath := filepath.Join(libDir, "libtest.so")
+	cpath := filepath.Join(root, "tests", "ffi_integration", "lib.c")
+	gcc := exec.Command("gcc", "-shared", "-fPIC", "-o", libPath, cpath)
+	if out, err := gcc.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build test lib: %v (%s)", err, string(out))
+	}
+
+	proj := t.TempDir()
+	fig := filepath.Join(proj, "fig.toml")
+	cfg := fmt.Sprintf("[ffi]\nenabled = true\nhelper = %q\ncall_timeout = 10000\n", bin)
+	if err := os.WriteFile(fig, []byte(cfg), 0644); err != nil {
+		t.Fatalf("cannot write fig.toml: %v", err)
+	}
+
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	os.Chdir(proj)
+
+	mod := builtins.Get("ffi")
+	if mod == nil {
+		t.Fatal("ffi module not found")
+	}
+	load := mod.Entries["load"]
+	sym := mod.Entries["sym"]
+	call := mod.Entries["call"]
+
+	// 500 sequential cycles of load → sym → call → verify
+	const N = 500
+	for i := 0; i < N; i++ {
+		v, err := load.Builtin([]environment.Value{environment.NewString(libPath)})
+		if err != nil {
+			t.Fatalf("load %d failed: %v", i, err)
+		}
+		handle := v.Str
+
+		sV, err := sym.Builtin([]environment.Value{
+			environment.NewString(handle),
+			environment.NewString("sum3"),
+			environment.NewString("int"),
+		})
+		if err != nil {
+			t.Fatalf("sym %d failed: %v", i, err)
+		}
+		symId := sV.Str
+
+		a := float64(i)
+		b := float64(i + 1)
+		c := float64(i + 2)
+		res, err := call.Builtin([]environment.Value{
+			environment.NewString(symId),
+			environment.NewNumber(a),
+			environment.NewNumber(b),
+			environment.NewNumber(c),
+		})
+		if err != nil {
+			t.Fatalf("call %d failed: %v", i, err)
+		}
+		expected := a + b + c
+		if res.Type != environment.NumberType || res.Num != expected {
+			t.Fatalf("call %d: expected %v, got %v", i, expected, res)
+		}
+	}
+}

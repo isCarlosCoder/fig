@@ -11,13 +11,73 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
+// ffiLogLevel caches the parsed FFI_LOG_LEVEL for the client side.
+// 0=error, 1=warn, 2=info, 3=debug. Default: warn (1).
+var ffiLogLevel = func() int {
+	switch strings.ToLower(os.Getenv("FFI_LOG_LEVEL")) {
+	case "error":
+		return 0
+	case "info":
+		return 2
+	case "debug":
+		return 3
+	default:
+		return 1 // warn
+	}
+}()
+
+func ffiDebug(format string, args ...interface{}) {
+	if ffiLogLevel >= 3 {
+		fmt.Fprintf(os.Stderr, "ffi client: [DEBUG] "+format+"\n", args...)
+	}
+}
+
+func ffiWarn(format string, args ...interface{}) {
+	if ffiLogLevel >= 1 {
+		fmt.Fprintf(os.Stderr, "ffi client: [WARN] "+format+"\n", args...)
+	}
+}
+
+// FFIError represents a structured error from the FFI helper.
+type FFIError struct {
+	Code    string
+	Message string
+}
+
+func (e *FFIError) Error() string {
+	return fmt.Sprintf("[%s] %s", e.Code, e.Message)
+}
+
+// ffiParseError extracts a structured error from a helper response.
+// It handles both the new format {"code":"ERR_...","message":"..."} and
+// falls back to a plain string for backwards compatibility.
+func ffiParseError(resp map[string]interface{}, prefix string) error {
+	raw := resp["error"]
+	if raw == nil {
+		return fmt.Errorf("%s: unknown error", prefix)
+	}
+	if m, ok := raw.(map[string]interface{}); ok {
+		code, _ := m["code"].(string)
+		msg, _ := m["message"].(string)
+		if code != "" {
+			return &FFIError{Code: code, Message: msg}
+		}
+	}
+	// fallback: plain string or Sprintf
+	return fmt.Errorf("%s: %v", prefix, raw)
+}
+
 var helpersMu sync.Mutex
 var helpers = map[string]*helperClient{}
+
+// FFIProtocolVersion is the protocol version the client expects from the helper.
+const FFIProtocolVersion = "1.0"
 
 // startHelperOnce starts the helper at path, runs it with --server and returns a client
 // The helper is short-lived for now (we start/stop per call).
@@ -94,20 +154,20 @@ func (h *helperClient) readLoop() {
 			// extract cb id and args
 			cbid, _ := resp["cb"].(string)
 			args, _ := resp["args"].([]interface{})
-			fmt.Fprintf(os.Stderr, "ffi client: received invoke_callback id=%s cb=%s args=%v\n", id, cbid, args)
+			ffiDebug("received invoke_callback id=%s cb=%s args=%v", id, cbid, args)
 			// run callback
 			res, err := runCallback(cbid, args)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "ffi client: callback error: %v\n", err)
+				ffiWarn("callback error: %v", err)
 				_ = h.sendRaw(map[string]interface{}{"ok": false, "error": err.Error(), "id": id})
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "ffi client: callback result for id=%s res=%v\n", id, res)
+			ffiDebug("callback result for id=%s res=%v", id, res)
 			_ = h.sendRaw(map[string]interface{}{"ok": true, "resp": res, "id": id})
 			continue
 		}
 		// unknown incoming message; ignore
-		fmt.Fprintf(os.Stderr, "ffi client: ignoring incoming message: %v\n", resp)
+		ffiWarn("ignoring incoming message: %v", resp)
 		continue
 	}
 	// if scanner stopped, notify pending channels of error
@@ -179,6 +239,13 @@ func getHelperForProject(projectRoot string, helperPath string) (*helperClient, 
 		delete(helpers, projectRoot+":starting")
 		helpers[projectRoot] = newHc
 		helpersMu.Unlock()
+		if err := newHc.performHandshake(); err != nil {
+			_ = newHc.Stop()
+			helpersMu.Lock()
+			delete(helpers, projectRoot)
+			helpersMu.Unlock()
+			return nil, err
+		}
 		return newHc, nil
 	}
 	// POSIX: use unix socket mode
@@ -218,6 +285,13 @@ func getHelperForProject(projectRoot string, helperPath string) (*helperClient, 
 	delete(helpers, projectRoot+":starting")
 	helpers[projectRoot] = newHc
 	helpersMu.Unlock()
+	if err := newHc.performHandshake(); err != nil {
+		_ = newHc.Stop()
+		helpersMu.Lock()
+		delete(helpers, projectRoot)
+		helpersMu.Unlock()
+		return nil, err
+	}
 	return newHc, nil
 }
 
@@ -383,6 +457,48 @@ func (h *helperClient) call(req map[string]interface{}) (map[string]interface{},
 	}
 }
 
+// performHandshake sends a handshake command to verify protocol version compatibility.
+// Returns nil on success or if the helper doesn't support handshake (legacy).
+func (h *helperClient) performHandshake() error {
+	resp, err := h.call(map[string]interface{}{
+		"cmd":     "handshake",
+		"version": FFIProtocolVersion,
+	})
+	if err != nil {
+		// If the call itself fails (e.g. timeout, connection error), propagate
+		ffiWarn("handshake failed: %v", err)
+		return nil // treat as legacy helper
+	}
+	if ok, _ := resp["ok"].(bool); !ok {
+		// helper doesn't recognize "handshake" → legacy helper, warn and continue
+		ffiWarn("helper does not support handshake (legacy mode)")
+		return nil
+	}
+	// Extract version from result
+	if result, ok := resp["result"].(map[string]interface{}); ok {
+		helperVer, _ := result["version"].(string)
+		if helperVer != "" && helperVer != FFIProtocolVersion {
+			// Major version mismatch
+			major := func(v string) string {
+				if i := len(v); i > 0 {
+					for j := 0; j < len(v); j++ {
+						if v[j] == '.' {
+							return v[:j]
+						}
+					}
+				}
+				return v
+			}
+			if major(helperVer) != major(FFIProtocolVersion) {
+				return fmt.Errorf("FFI protocol version mismatch: client=%s, helper=%s", FFIProtocolVersion, helperVer)
+			}
+			ffiWarn("FFI protocol minor version difference: client=%s, helper=%s", FFIProtocolVersion, helperVer)
+		}
+		ffiDebug("handshake ok: helper version=%s", helperVer)
+	}
+	return nil
+}
+
 // Load asks the helper to load a library at path and returns a handle string.
 func (h *helperClient) Load(path string) (string, error) {
 	resp, err := h.call(map[string]interface{}{"cmd": "load", "path": path})
@@ -390,11 +506,21 @@ func (h *helperClient) Load(path string) (string, error) {
 		return "", err
 	}
 	if ok, _ := resp["ok"].(bool); !ok {
-		return "", fmt.Errorf("load failed: %v", resp["error"])
+		return "", ffiParseError(resp, "load")
 	}
-	// handle is numeric; stringify it
-	handle := resp["handle"]
-	return fmt.Sprintf("%v", handle), nil
+	// new envelope: result.handle; old: handle
+	if result, ok := resp["result"].(map[string]interface{}); ok {
+		if h, ok := result["handle"].(string); ok {
+			return h, nil
+		}
+		if h, ok := result["handle"]; ok {
+			return fmt.Sprintf("%v", h), nil
+		}
+	}
+	if handle := resp["handle"]; handle != nil {
+		return fmt.Sprintf("%v", handle), nil
+	}
+	return "", fmt.Errorf("load: missing handle in response")
 }
 
 // Call asks the helper to call a symbol-less invocation (fallback) with args and returns the raw response.
@@ -404,35 +530,42 @@ func (h *helperClient) Call(args []interface{}) (interface{}, error) {
 		return nil, err
 	}
 	if ok, _ := resp["ok"].(bool); !ok {
-		return nil, fmt.Errorf("call failed: %v", resp["error"])
+		return nil, ffiParseError(resp, "call")
+	}
+	// new envelope: result; old: resp
+	if result, ok := resp["result"]; ok {
+		return result, nil
 	}
 	return resp["resp"], nil
 }
 
 // Sym resolves a symbol name on a loaded handle and returns a symbol id string.
 func (h *helperClient) Sym(handle string, name string, rtype string) (string, error) {
-	hid, err := strconv.ParseInt(handle, 10, 64)
-	if err != nil {
-		return "", fmt.Errorf("invalid handle: %v", err)
-	}
-	resp, err := h.call(map[string]interface{}{"cmd": "sym", "handle": float64(hid), "name": name, "rtype": rtype})
+	resp, err := h.call(map[string]interface{}{"cmd": "sym", "handle": handle, "name": name, "rtype": rtype})
 	if err != nil {
 		return "", err
 	}
 	if ok, _ := resp["ok"].(bool); !ok {
-		return "", fmt.Errorf("sym failed: %v", resp["error"])
+		return "", ffiParseError(resp, "sym")
 	}
-	sym := resp["symbol"]
-	return fmt.Sprintf("%v", sym), nil
+	// new envelope: result.symbol; old: symbol
+	if result, ok := resp["result"].(map[string]interface{}); ok {
+		if s, ok := result["symbol"].(string); ok {
+			return s, nil
+		}
+		if s, ok := result["symbol"]; ok {
+			return fmt.Sprintf("%v", s), nil
+		}
+	}
+	if sym := resp["symbol"]; sym != nil {
+		return fmt.Sprintf("%v", sym), nil
+	}
+	return "", fmt.Errorf("sym: missing symbol in response")
 }
 
 // CallSymbol asks the helper to call a previously resolved symbol id with args.
 func (h *helperClient) CallSymbol(symbol string, args []interface{}, argTypes []string) (interface{}, error) {
-	sid, err := strconv.ParseInt(symbol, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("invalid symbol id: %v", err)
-	}
-	req := map[string]interface{}{"cmd": "call", "symbol": float64(sid), "args": args}
+	req := map[string]interface{}{"cmd": "call", "symbol": symbol, "args": args}
 	if len(argTypes) > 0 {
 		req["arg_types"] = argTypes
 	}
@@ -441,7 +574,11 @@ func (h *helperClient) CallSymbol(symbol string, args []interface{}, argTypes []
 		return nil, err
 	}
 	if ok, _ := resp["ok"].(bool); !ok {
-		return nil, fmt.Errorf("call failed: %v", resp["error"])
+		return nil, ffiParseError(resp, "call")
+	}
+	// new envelope: result; old: resp
+	if result, ok := resp["result"]; ok {
+		return result, nil
 	}
 	return resp["resp"], nil
 }
@@ -453,10 +590,18 @@ func (h *helperClient) Alloc(size int) (string, error) {
 		return "", err
 	}
 	if ok, _ := resp["ok"].(bool); !ok {
-		return "", fmt.Errorf("alloc failed: %v", resp["error"])
+		return "", ffiParseError(resp, "alloc")
 	}
-	id := fmt.Sprintf("%v", resp["mem_id"])
-	return id, nil
+	// new envelope: result.mem_id; old: mem_id
+	if result, ok := resp["result"].(map[string]interface{}); ok {
+		if mid, ok := result["mem_id"]; ok {
+			return fmt.Sprintf("%v", mid), nil
+		}
+	}
+	if mid := resp["mem_id"]; mid != nil {
+		return fmt.Sprintf("%v", mid), nil
+	}
+	return "", fmt.Errorf("alloc: missing mem_id in response")
 }
 
 // Strdup duplicates a Go string as a C-allocated string in the helper and returns a mem id
@@ -466,10 +611,18 @@ func (h *helperClient) Strdup(s string) (string, error) {
 		return "", err
 	}
 	if ok, _ := resp["ok"].(bool); !ok {
-		return "", fmt.Errorf("strdup failed: %v", resp["error"])
+		return "", ffiParseError(resp, "strdup")
 	}
-	id := fmt.Sprintf("%v", resp["mem_id"])
-	return id, nil
+	// new envelope: result.mem_id; old: mem_id
+	if result, ok := resp["result"].(map[string]interface{}); ok {
+		if mid, ok := result["mem_id"]; ok {
+			return fmt.Sprintf("%v", mid), nil
+		}
+	}
+	if mid := resp["mem_id"]; mid != nil {
+		return fmt.Sprintf("%v", mid), nil
+	}
+	return "", fmt.Errorf("strdup: missing mem_id in response")
 }
 
 // Free releases a previously allocated mem id
@@ -479,7 +632,7 @@ func (h *helperClient) Free(id string) error {
 		return err
 	}
 	if ok, _ := resp["ok"].(bool); !ok {
-		return fmt.Errorf("free failed: %v", resp["error"])
+		return ffiParseError(resp, "free")
 	}
 	return nil
 }
@@ -492,7 +645,7 @@ func (h *helperClient) MemWrite(id string, b64 string, offset int) error {
 		return err
 	}
 	if ok, _ := resp["ok"].(bool); !ok {
-		return fmt.Errorf("mem_write failed: %v", resp["error"])
+		return ffiParseError(resp, "mem_write")
 	}
 	return nil
 }
@@ -504,7 +657,13 @@ func (h *helperClient) MemRead(id string, offset int, length int) (string, error
 		return "", err
 	}
 	if ok, _ := resp["ok"].(bool); !ok {
-		return "", fmt.Errorf("mem_read failed: %v", resp["error"])
+		return "", ffiParseError(resp, "mem_read")
+	}
+	// new envelope: result.__bytes__; old: resp.__bytes__
+	if result, ok := resp["result"].(map[string]interface{}); ok {
+		if b64, _ := result["__bytes__"].(string); b64 != "" {
+			return b64, nil
+		}
 	}
 	if m, ok := resp["resp"].(map[string]interface{}); ok {
 		if b64, _ := m["__bytes__"].(string); b64 != "" {
@@ -512,4 +671,28 @@ func (h *helperClient) MemRead(id string, offset int, length int) (string, error
 		}
 	}
 	return "", fmt.Errorf("invalid mem_read response")
+}
+
+// HelperForTest is an exported wrapper around helperClient for use in tests.
+type HelperForTest struct {
+	hc *helperClient
+}
+
+func (h *HelperForTest) Load(path string) (string, error) { return h.hc.Load(path) }
+func (h *HelperForTest) Free(id string) error             { return h.hc.Free(id) }
+func (h *HelperForTest) Sym(handle, name, rtype string) (string, error) {
+	return h.hc.Sym(handle, name, rtype)
+}
+func (h *HelperForTest) CallSymbol(sym string, args []interface{}, argTypes []string) (interface{}, error) {
+	return h.hc.CallSymbol(sym, args, argTypes)
+}
+
+// GetHelperForTest returns a HelperForTest client for the given project root
+// using the specified helper binary path. For unit tests only.
+func GetHelperForTest(projectRoot, helperBin string) (*HelperForTest, error) {
+	hc, err := getHelperForProject(projectRoot, helperBin)
+	if err != nil {
+		return nil, err
+	}
+	return &HelperForTest{hc: hc}, nil
 }

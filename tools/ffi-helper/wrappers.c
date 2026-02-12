@@ -7,6 +7,12 @@ typedef int (*int_fn0)(void);
 typedef int (*int_fn1)(int);
 typedef int (*int_fn2)(int,int);
 typedef int (*int_fn3)(int,int,int);
+// mixed-type int wrappers
+typedef int (*int_fn1_str)(const char*);
+typedef int (*int_fn2_str_str)(const char*, const char*);
+typedef int (*int_fn2_str_int)(const char*, int);
+typedef int (*int_fn2_int_str)(int, const char*);
+typedef int (*int_fn4_iisi)(int, int, const char*, int);
 
 int ffi_call_int_fn0(void* fn) {
     return ((int_fn0)fn)();
@@ -19,6 +25,21 @@ int ffi_call_int_fn(void* fn, int a, int b) {
 }
 int ffi_call_int_fn3(void* fn, int a, int b, int c) {
     return ((int_fn3)fn)(a,b,c);
+}
+int ffi_call_int_fn1_str(void* fn, char* a) {
+    return ((int_fn1_str)fn)(a);
+}
+int ffi_call_int_fn2_str_str(void* fn, char* a, char* b) {
+    return ((int_fn2_str_str)fn)(a, b);
+}
+int ffi_call_int_fn2_str_int(void* fn, char* a, int b) {
+    return ((int_fn2_str_int)fn)(a, b);
+}
+int ffi_call_int_fn2_int_str(void* fn, int a, char* b) {
+    return ((int_fn2_int_str)fn)(a, b);
+}
+int ffi_call_int_fn4_iisi(void* fn, int a, int b, char* c, int d) {
+    return ((int_fn4_iisi)fn)(a, b, c, d);
 }
 
 // === double wrappers ===
@@ -59,6 +80,7 @@ void ffi_call_void_fn2_str(void* fn, char* a, char* b) {
 typedef char* (*str_fn0)(void);
 typedef char* (*str_fn1)(char*);
 typedef char* (*str_fn2)(char*,char*);
+typedef char* (*str_fn2_intint)(int,int);
 typedef char* (*str_fn3)(char*, int, double);
 typedef char* (*str_fn3_intint)(char*, int, int);
 typedef char* (*str_fn3s)(char*, char*, char*);
@@ -74,6 +96,9 @@ char* ffi_call_str_fn1(void* fn, char* a) {
 }
 char* ffi_call_str_fn2(void* fn, char* a, char* b) {
     return ((str_fn2)fn)(a,b);
+}
+char* ffi_call_str_fn2_intint(void* fn, int a, int b) {
+    return ((str_fn2_intint)fn)(a,b);
 }
 char* ffi_call_str_fn3(void* fn, char* a, int b, double c) {
     return ((str_fn3)fn)(a,b,c);

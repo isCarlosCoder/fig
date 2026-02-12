@@ -2,6 +2,8 @@
 
 > **AVISO: adição experimental** — as funcionalidades de Sandbox e integração ASAN/Valgrind nesta branch são experimentais. Podem existir bugs ou regressões; use em ambientes de teste. Atualizaremos a documentação conforme as mudanças forem validadas.
 
+> **Documentação detalhada:** Para referência completa do protocolo, tipos, erros, memória, sandbox e exemplos, consulte [`docs/ffi/`](ffi/index.md).
+
 O módulo `ffi` permite que programas Fig chamem funções de bibliotecas nativas escritas em C (ou qualquer linguagem que exporte símbolos com convenção C). Com FFI, é possível reutilizar código nativo existente, acessar APIs do sistema e criar extensões de alta performance.
 
 ## Importação
@@ -59,6 +61,13 @@ let add = ffi.sym(lib, "add", "int")
 ```
 
 O terceiro argumento é o tipo de retorno: `"int"`, `"double"`, `"string"` ou `"void"`.
+
+Se a função possuir tipos mistos, passe o `argTypes` como **array** no 4º argumento:
+
+```js
+let add = ffi.sym(lib, "add", "int", ["int", "int"])
+let open = ffi.sym(lib, "db_open", "int", ["string"])
+```
 
 ### 3. Chamar a função
 
@@ -135,17 +144,19 @@ ffi.call(log, "Sistema iniciado")      # imprime no stdout, retorna nil
 
 | Retorno    | 0 | 1 | 2 | 3 | 4 |
 |-----------|---|---|---|---|---|
-| `"int"`   | ✓ | ✓ | ✓ | ✓ | — |
+| `"int"`   | ✓ | ✓ | ✓ | ✓ | * |
 | `"double"`| ✓ | ✓ | ✓ | — | — |
 | `"string"`| ✓ | ✓ | ✓ | ✓ | ✓ |
 | `"void"`  | ✓ | ✓ | ✓ | — | — |
+
+* `"int"` suporta até 3 argumentos nativos (0..3) e **algumas** assinaturas mistas com `arg_types` (ex.: `"iisi"`).
 
 ## Tipos de argumento (`arg_types`)
 
 Quando a função tem argumentos mistos (ex.: `string` e `int`), declare os tipos na chamada `sym`:
 
 ```js
-let f = ffi.sym(lib, "pessoa_info", "string", "string", "int", "string", "int")
+let f = ffi.sym(lib, "pessoa_info", "string", ["string", "int", "string", "int"])
 # arg_types = ["string", "int", "string", "int"]
 ```
 
@@ -360,7 +371,7 @@ print(r)   # "pong"
 | `ffi.lib_name(base)` | Nome da lib: `"lib<base>.so"` / `".dylib"` / `"<base>.dll"` |
 | `ffi.ping()` | Testa conexão com helper, retorna `"pong"` |
 | `ffi.load(path)` | Carrega `.so`/`.dylib`/`.dll`, retorna handle |
-| `ffi.sym(handle, nome, retorno, ...arg_types?)` | Resolve símbolo, retorna symbol id |
+| `ffi.sym(handle, nome, retorno, [argTypes])` | Resolve símbolo, retorna symbol id |
 | `ffi.call(symId, ...args)` | Chama função nativa |
 | `ffi.call_raw(symId, argsArray)` | Chama com args em array |
 | `ffi.define_struct(nome, campos)` | Registra schema de struct |

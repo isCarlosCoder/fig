@@ -1,0 +1,204 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Fig FFI Protocol v1.0",
+  "description": "JSON Schema do protocolo de comunicação entre o runtime Fig e o FFI helper.",
+
+  "definitions": {
+    "request": {
+      "type": "object",
+      "required": ["cmd", "id"],
+      "properties": {
+        "cmd": {
+          "type": "string",
+          "enum": ["load", "sym", "call", "alloc", "free", "strdup", "mem_write", "mem_read", "ping", "handshake"],
+          "description": "Comando a ser executado pelo helper."
+        },
+        "id": {
+          "type": "integer",
+          "description": "Identificador sequencial da requisição."
+        },
+        "path": {
+          "type": "string",
+          "description": "Caminho da biblioteca (comando load)."
+        },
+        "handle": {
+          "type": "string",
+          "description": "Handle da biblioteca (ex: 'lib-1')."
+        },
+        "symbol": {
+          "type": "string",
+          "description": "ID do símbolo (ex: 'sym-1') — para call/free."
+        },
+        "name": {
+          "type": "string",
+          "description": "Nome do símbolo na biblioteca (comando sym)."
+        },
+        "retType": {
+          "type": "string",
+          "enum": ["int", "double", "string", "void"],
+          "description": "Tipo de retorno esperado."
+        },
+        "argTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["int", "double", "string"]
+          },
+          "description": "Tipos dos argumentos."
+        },
+        "args": {
+          "type": "array",
+          "items": {},
+          "description": "Argumentos da chamada."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Tamanho em bytes para alocação."
+        },
+        "mid": {
+          "type": "string",
+          "description": "ID de memória (ex: 'm-1')."
+        },
+        "data": {
+          "type": "string",
+          "description": "Dados em base64 para mem_write."
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Offset para mem_read."
+        },
+        "len": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Quantidade de bytes a ler (mem_read)."
+        },
+        "str": {
+          "type": "string",
+          "description": "String a duplicar (comando strdup)."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "successResponse": {
+      "type": "object",
+      "required": ["ok", "id"],
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "id": {
+          "type": "integer",
+          "description": "ID da requisição correspondente."
+        },
+        "result": {
+          "description": "Resultado do comando. Tipo varia conforme o comando."
+        },
+        "handle": {
+          "type": "string",
+          "description": "Handle retornado (retrocompatibilidade)."
+        },
+        "symbol": {
+          "type": "string",
+          "description": "Symbol ID retornado (retrocompatibilidade)."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "errorObject": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "ERR_INVALID_JSON",
+            "ERR_UNKNOWN_CMD",
+            "ERR_MISSING_PARAM",
+            "ERR_INVALID_HANDLE",
+            "ERR_INVALID_SYMBOL",
+            "ERR_DLOPEN_FAILED",
+            "ERR_DLSYM_FAILED",
+            "ERR_CALL_FAILED",
+            "ERR_TYPE_ERROR",
+            "ERR_UNSUPPORTED_ARGS",
+            "ERR_MALLOC_FAILED",
+            "ERR_INVALID_MEM_ID",
+            "ERR_OUT_OF_BOUNDS",
+            "ERR_INVALID_BASE64",
+            "ERR_VERSION_MISMATCH"
+          ],
+          "description": "Código de erro estruturado."
+        },
+        "message": {
+          "type": "string",
+          "description": "Mensagem descritiva do erro."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "errorResponse": {
+      "type": "object",
+      "required": ["ok", "id", "error"],
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": false
+        },
+        "id": {
+          "type": "integer",
+          "description": "ID da requisição correspondente."
+        },
+        "error": {
+          "oneOf": [
+            { "$ref": "#/definitions/errorObject" },
+            { "type": "string", "description": "Formato legado (string simples)." }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "handshakeResponse": {
+      "type": "object",
+      "required": ["ok", "id", "result"],
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "id": {
+          "type": "integer"
+        },
+        "result": {
+          "type": "object",
+          "required": ["version", "supported_ops"],
+          "properties": {
+            "version": {
+              "type": "string",
+              "pattern": "^\\d+\\.\\d+$",
+              "description": "Versão do protocolo (ex: '1.0')."
+            },
+            "supported_ops": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Lista de comandos suportados."
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "oneOf": [
+    { "$ref": "#/definitions/request" },
+    { "$ref": "#/definitions/successResponse" },
+    { "$ref": "#/definitions/errorResponse" },
+    { "$ref": "#/definitions/handshakeResponse" }
+  ]
+}

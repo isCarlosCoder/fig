@@ -4,8 +4,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -530,18 +532,56 @@ func init() {
 							return environment.NewNil(), err
 						}
 					default:
-						// simple types
-						switch in.Type {
-						case environment.NumberType:
+						// simple types with coercion based on declared argType
+						isIntType := at == "int" || at == "integer"
+						isDoubleType := at == "double" || at == "float" || at == "number"
+						isStringType := at == "string" || at == "str"
+
+						switch {
+						case isIntType && in.Type == environment.NumberType:
+							// coerce float64 → int (truncation), verify safe range
+							iv := int(in.Num)
+							if math.Abs(in.Num) > math.MaxInt32 {
+								return environment.NewNil(), fmt.Errorf("call: arg %d value %v overflows int32 range", ai-1, in.Num)
+							}
+							mar = append(mar, float64(iv))
+							expandedArgTypes = append(expandedArgTypes, at)
+						case isIntType && in.Type == environment.StringType:
+							// try string → int conversion
+							iv, convErr := strconv.Atoi(in.Str)
+							if convErr != nil {
+								return environment.NewNil(), fmt.Errorf("call: arg %d expects int, got string %q (not a valid integer)", ai-1, in.Str)
+							}
+							mar = append(mar, float64(iv))
+							expandedArgTypes = append(expandedArgTypes, at)
+						case isDoubleType && in.Type == environment.NumberType:
+							// pass-through
 							mar = append(mar, in.Num)
 							expandedArgTypes = append(expandedArgTypes, at)
-						case environment.StringType:
+						case isDoubleType && in.Type == environment.StringType:
+							fv, convErr := strconv.ParseFloat(in.Str, 64)
+							if convErr != nil {
+								return environment.NewNil(), fmt.Errorf("call: arg %d expects double, got string %q (not a valid number)", ai-1, in.Str)
+							}
+							mar = append(mar, fv)
+							expandedArgTypes = append(expandedArgTypes, at)
+						case isStringType && in.Type == environment.NumberType:
+							// coerce number → string
+							mar = append(mar, fmt.Sprintf("%g", in.Num))
+							expandedArgTypes = append(expandedArgTypes, at)
+						case isStringType && in.Type == environment.StringType:
 							mar = append(mar, in.Str)
 							expandedArgTypes = append(expandedArgTypes, at)
-						case environment.BooleanType:
+						case in.Type == environment.NumberType:
+							mar = append(mar, in.Num)
+							expandedArgTypes = append(expandedArgTypes, at)
+						case in.Type == environment.StringType:
+							mar = append(mar, in.Str)
+							expandedArgTypes = append(expandedArgTypes, at)
+						case in.Type == environment.BooleanType:
 							mar = append(mar, in.Bool)
 							expandedArgTypes = append(expandedArgTypes, at)
-						case environment.ObjectType:
+						case in.Type == environment.ObjectType:
 							x, err := fromEnvironmentValue(in)
 							if err != nil {
 								return environment.NewNil(), fmt.Errorf("cannot convert object arg: %v", err)
@@ -549,7 +589,7 @@ func init() {
 							mar = append(mar, x)
 							expandedArgTypes = append(expandedArgTypes, at)
 						default:
-							return environment.NewNil(), fmt.Errorf("unsupported argument type for call: %v", in.Type)
+							return environment.NewNil(), fmt.Errorf("call: arg %d expects %s, got %v", ai-1, at, in.Type)
 						}
 					}
 				}
@@ -659,11 +699,17 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("helper_cmd failed: %v", err)
 			}
 			if ok, _ := resp["ok"].(bool); !ok {
-				return environment.NewNil(), fmt.Errorf("helper_cmd helper error: %v; stderr: %s", resp["error"], hc.stderrString())
+				return environment.NewNil(), fmt.Errorf("helper_cmd: %v; stderr: %s", ffiParseError(resp, "helper_cmd"), hc.stderrString())
 			}
-			val, err := toEnvironmentValue(resp["resp"])
+			val, err := toEnvironmentValue(resp["result"])
 			if err != nil {
-				return environment.NewNil(), err
+				// retrocompat: try old "resp" field
+				if oldResp, ok := resp["resp"]; ok {
+					val, err = toEnvironmentValue(oldResp)
+				}
+				if err != nil {
+					return environment.NewNil(), err
+				}
 			}
 			return val, nil
 		}),
@@ -1099,7 +1145,11 @@ func init() {
 				}
 			}
 			if ok, _ := resp["ok"].(bool); !ok {
-				return environment.NewNil(), fmt.Errorf("helper error: %v; stderr: %s", resp["error"], hc.stderrString())
+				return environment.NewNil(), fmt.Errorf("ping: %v; stderr: %s", ffiParseError(resp, "ping"), hc.stderrString())
+			}
+			// new envelope: result; old: resp
+			if r, _ := resp["result"].(string); r == "pong" {
+				return environment.NewString("pong"), nil
 			}
 			if r, _ := resp["resp"].(string); r == "pong" {
 				return environment.NewString("pong"), nil

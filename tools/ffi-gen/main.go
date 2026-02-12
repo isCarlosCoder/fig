@@ -18,6 +18,25 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// SupportedTypes are the types accepted by the FFI protocol.
+var SupportedTypes = map[string]bool{
+	"int":    true,
+	"double": true,
+	"string": true,
+	"void":   true,
+}
+
+// IsSupportedType checks if a type string is valid (including struct:Name).
+func IsSupportedType(t string) bool {
+	if SupportedTypes[t] {
+		return true
+	}
+	if strings.HasPrefix(t, "struct:") && len(t) > 7 {
+		return true
+	}
+	return false
+}
+
 // ---------- ffi.def.toml schema ----------
 
 // DefFile is the top-level structure of an ffi.def.toml file.
@@ -54,6 +73,106 @@ type FunctionDef struct {
 }
 
 // ---------- code generation ----------
+
+// ValidateDef checks all types in a DefFile against supported types.
+// Returns a slice of human-readable error strings (empty = valid).
+func ValidateDef(def *DefFile) []string {
+	var errs []string
+	for _, s := range def.Structs {
+		for _, f := range s.Fields {
+			if !IsSupportedType(f.Type) {
+				errs = append(errs, fmt.Sprintf("struct %s, field %s: unknown type: %s. Supported: int, double, string, void, struct:Name", s.Name, f.Name, f.Type))
+			}
+		}
+	}
+	for _, f := range def.Functions {
+		if f.Return != "" && !IsSupportedType(f.Return) {
+			errs = append(errs, fmt.Sprintf("function %s: unknown return type: %s. Supported: int, double, string, void, struct:Name", f.Name, f.Return))
+		}
+		for i, a := range f.Args {
+			if !IsSupportedType(a) {
+				errs = append(errs, fmt.Sprintf("function %s, arg %d: unknown type: %s. Supported: int, double, string, void, struct:Name", f.Name, i+1, a))
+			}
+		}
+	}
+	return errs
+}
+
+// FigTomlFFI represents the [ffi] section of fig.toml.
+type FigTomlFFI struct {
+	Enabled     bool   `toml:"enabled"`
+	Helper      string `toml:"helper"`
+	CallTimeout int    `toml:"call_timeout"`
+	APIVersion  string `toml:"api_version"`
+}
+
+// FigToml represents the top-level fig.toml configuration.
+type FigToml struct {
+	FFI FigTomlFFI `toml:"ffi"`
+}
+
+// ValidateFigToml reads and validates a fig.toml file for FFI readiness.
+// Returns a slice of human-readable error strings (empty = valid).
+func ValidateFigToml(path string) []string {
+	var errs []string
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []string{fmt.Sprintf("cannot read fig.toml: %v", err)}
+	}
+
+	var cfg FigToml
+	if err := toml.Unmarshal(data, &cfg); err != nil {
+		return []string{fmt.Sprintf("cannot parse fig.toml: %v", err)}
+	}
+
+	if !cfg.FFI.Enabled {
+		errs = append(errs, "fig.toml: ffi.enabled is not true")
+	}
+
+	if cfg.FFI.Helper == "" {
+		errs = append(errs, "fig.toml: ffi.helper is not set")
+	} else {
+		if _, err := os.Stat(cfg.FFI.Helper); os.IsNotExist(err) {
+			errs = append(errs, fmt.Sprintf("fig.toml: ffi.helper binary not found: %s", cfg.FFI.Helper))
+		}
+	}
+
+	return errs
+}
+
+// CheckHelper verifies that the helper binary exists and is executable.
+func CheckHelper(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("helper binary not found: %s", path)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("helper path is a directory: %s", path)
+	}
+	// Check executable bit (unix)
+	if info.Mode()&0111 == 0 {
+		return fmt.Errorf("helper binary is not executable: %s", path)
+	}
+	return nil
+}
+
+// buildCSignature creates a C-style signature comment like "# C: int add(int a, int b)"
+func buildCSignature(f FunctionDef) string {
+	sym := f.Symbol
+	if sym == "" {
+		sym = f.Name
+	}
+	ret := f.Return
+	if ret == "" {
+		ret = "int"
+	}
+	params := make([]string, len(f.Args))
+	for i, a := range f.Args {
+		params[i] = fmt.Sprintf("%s %s", a, paramName(i))
+	}
+	return fmt.Sprintf("# C: %s %s(%s)", ret, sym, strings.Join(params, ", "))
+}
 
 // Generate produces Fig source code from a DefFile.
 func Generate(def *DefFile) string {
@@ -104,25 +223,22 @@ func Generate(def *DefFile) string {
 				ret = "int"
 			}
 
+			// C signature comment
+			b.WriteString(buildCSignature(f) + "\n")
+
 			// symbol variable
 			symVar := "__sym_" + f.Name
 
-			// Build sym call with optional arg_types
-			hasArgTypes := len(f.Args) > 0 && needsArgTypes(f.Args)
-			if hasArgTypes {
-				// Pass arg_types as 4th arg (array)
-				argTypesLit := "["
-				for i, a := range f.Args {
-					if i > 0 {
-						argTypesLit += ", "
-					}
-					argTypesLit += fmt.Sprintf("\"%s\"", a)
+			// Always generate with argTypes for type safety
+			argTypesLit := "["
+			for i, a := range f.Args {
+				if i > 0 {
+					argTypesLit += ", "
 				}
-				argTypesLit += "]"
-				b.WriteString(fmt.Sprintf("let %s = ffi.sym(__lib, \"%s\", \"%s\", %s)\n", symVar, sym, ret, argTypesLit))
-			} else {
-				b.WriteString(fmt.Sprintf("let %s = ffi.sym(__lib, \"%s\", \"%s\")\n", symVar, sym, ret))
+				argTypesLit += fmt.Sprintf("\"%s\"", a)
 			}
+			argTypesLit += "]"
+			b.WriteString(fmt.Sprintf("let %s = ffi.sym(__lib, \"%s\", \"%s\", %s)\n", symVar, sym, ret, argTypesLit))
 
 			// function wrapper
 			params := buildParamList(len(f.Args))
@@ -325,7 +441,20 @@ func main() {
 	input := flag.String("input", "", "path to ffi.def.toml input file")
 	output := flag.String("output", "", "path to write generated .fig file (stdout if omitted)")
 	init_ := flag.String("init", "", "scaffold a new FFI project with given name")
+	validate := flag.Bool("validate", false, "validate the .ffi.def.toml without generating code")
+	checkHelper := flag.String("check-helper", "", "verify the helper binary exists and is executable")
+	figToml := flag.String("fig-toml", "", "path to fig.toml to validate FFI configuration")
 	flag.Parse()
+
+	// --check-helper: verify helper binary
+	if *checkHelper != "" {
+		if err := CheckHelper(*checkHelper); err != nil {
+			fmt.Fprintf(os.Stderr, "❌ %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "✅ Helper binary OK: %s\n", *checkHelper)
+		return
+	}
 
 	if *init_ != "" {
 		if err := scaffoldProject(*init_); err != nil {
@@ -339,6 +468,8 @@ func main() {
 	if *input == "" {
 		fmt.Fprintln(os.Stderr, "usage: ffi-gen -input <file.ffi.def.toml> [-output <file.fig>]")
 		fmt.Fprintln(os.Stderr, "       ffi-gen -init <project-name>")
+		fmt.Fprintln(os.Stderr, "       ffi-gen -input <file> -validate")
+		fmt.Fprintln(os.Stderr, "       ffi-gen -check-helper <path>")
 		os.Exit(1)
 	}
 
@@ -351,6 +482,30 @@ func main() {
 	if err := toml.Unmarshal(data, &def); err != nil {
 		fmt.Fprintf(os.Stderr, "cannot parse %s: %v\n", *input, err)
 		os.Exit(1)
+	}
+
+	// Validate types
+	if validationErrs := ValidateDef(&def); len(validationErrs) > 0 {
+		for _, e := range validationErrs {
+			fmt.Fprintf(os.Stderr, "❌ %s\n", e)
+		}
+		os.Exit(1)
+	}
+
+	// Validate fig.toml if provided
+	if *figToml != "" {
+		if tomlErrs := ValidateFigToml(*figToml); len(tomlErrs) > 0 {
+			for _, e := range tomlErrs {
+				fmt.Fprintf(os.Stderr, "⚠️  %s\n", e)
+			}
+			// Warnings, don't exit — continue with generation
+		}
+	}
+
+	// --validate mode: just validate, no output
+	if *validate {
+		fmt.Fprintf(os.Stderr, "✅ %s is valid\n", *input)
+		return
 	}
 
 	code := Generate(&def)

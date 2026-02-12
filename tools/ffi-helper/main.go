@@ -18,6 +18,12 @@ int ffi_call_int_fn0(void* fn);
 int ffi_call_int_fn1(void* fn, int a);
 int ffi_call_int_fn(void* fn, int a, int b);
 int ffi_call_int_fn3(void* fn, int a, int b, int c);
+// mixed-type int wrappers
+int ffi_call_int_fn1_str(void* fn, char* a);
+int ffi_call_int_fn2_str_str(void* fn, char* a, char* b);
+int ffi_call_int_fn2_str_int(void* fn, char* a, int b);
+int ffi_call_int_fn2_int_str(void* fn, int a, char* b);
+int ffi_call_int_fn4_iisi(void* fn, int a, int b, char* c, int d);
 // double wrappers
 double ffi_call_double_fn0(void* fn);
 double ffi_call_double_fn1(void* fn, double a);
@@ -31,6 +37,7 @@ void ffi_call_void_fn2_str(void* fn, char* a, char* b);
 char* ffi_call_str_fn0(void* fn);
 char* ffi_call_str_fn1(void* fn, char* a);
 char* ffi_call_str_fn2(void* fn, char* a, char* b);
+char* ffi_call_str_fn2_intint(void* fn, int a, int b);
 char* ffi_call_str_fn3(void* fn, char* a, int b, double c);
 char* ffi_call_str_fn3_intint(void* fn, char* a, int b, int c);
 char* ffi_call_str_fn3_strs(void* fn, char* a, char* b, char* c);
@@ -50,10 +57,95 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
+)
+
+// LogLevel represents the severity of a log message.
+type LogLevel int
+
+const (
+	LogError LogLevel = iota
+	LogWarn
+	LogInfo
+	LogDebug
+)
+
+// Logger provides leveled logging to stderr.
+type Logger struct {
+	level  LogLevel
+	prefix string
+}
+
+// NewLogger creates a Logger from a level string (error|warn|info|debug).
+// Defaults to warn if unrecognized.
+func NewLogger(level string) *Logger {
+	l := &Logger{prefix: "ffi-helper"}
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "error":
+		l.level = LogError
+	case "warn", "warning":
+		l.level = LogWarn
+	case "info":
+		l.level = LogInfo
+	case "debug":
+		l.level = LogDebug
+	default:
+		l.level = LogWarn
+	}
+	return l
+}
+
+func (l *Logger) Error(args ...interface{}) {
+	if l.level >= LogError {
+		fmt.Fprintln(os.Stderr, append([]interface{}{l.prefix + ": [ERROR]"}, args...)...)
+	}
+}
+
+func (l *Logger) Warn(args ...interface{}) {
+	if l.level >= LogWarn {
+		fmt.Fprintln(os.Stderr, append([]interface{}{l.prefix + ": [WARN]"}, args...)...)
+	}
+}
+
+func (l *Logger) Info(args ...interface{}) {
+	if l.level >= LogInfo {
+		fmt.Fprintln(os.Stderr, append([]interface{}{l.prefix + ": [INFO]"}, args...)...)
+	}
+}
+
+func (l *Logger) Debug(args ...interface{}) {
+	if l.level >= LogDebug {
+		fmt.Fprintln(os.Stderr, append([]interface{}{l.prefix + ": [DEBUG]"}, args...)...)
+	}
+}
+
+// log is the global logger, initialized in main().
+var log = NewLogger("warn")
+
+// FFI protocol version for handshake compatibility
+const FFIProtocolVersion = "1.0"
+
+// Error code constants for structured error responses
+const (
+	ErrInvalidJSON     = "ERR_INVALID_JSON"
+	ErrUnknownCmd      = "ERR_UNKNOWN_CMD"
+	ErrMissingParam    = "ERR_MISSING_PARAM"
+	ErrInvalidHandle   = "ERR_INVALID_HANDLE"
+	ErrInvalidSymbol   = "ERR_INVALID_SYMBOL"
+	ErrDlopenFailed    = "ERR_DLOPEN_FAILED"
+	ErrDlsymFailed     = "ERR_DLSYM_FAILED"
+	ErrCallFailed      = "ERR_CALL_FAILED"
+	ErrTypeError       = "ERR_TYPE_ERROR"
+	ErrUnsupportedArgs = "ERR_UNSUPPORTED_ARGS"
+	ErrMallocFailed    = "ERR_MALLOC_FAILED"
+	ErrInvalidMemID    = "ERR_INVALID_MEM_ID"
+	ErrOutOfBounds     = "ERR_OUT_OF_BOUNDS"
+	ErrInvalidBase64   = "ERR_INVALID_BASE64"
+	ErrVersionMismatch = "ERR_VERSION_MISMATCH"
 )
 
 // cbRequest used to send callback invocation requests from C into Fig via the helper
@@ -74,12 +166,49 @@ var memSize = map[string]int{}
 var memMu sync.Mutex
 var memNext uint64
 
+// safeFloat64 extracts a float64 from an interface{} value safely.
+func safeFloat64(v interface{}) (float64, error) {
+	switch n := v.(type) {
+	case float64:
+		return n, nil
+	case int:
+		return float64(n), nil
+	case int64:
+		return float64(n), nil
+	case nil:
+		return 0, fmt.Errorf("expected number, got nil")
+	default:
+		return 0, fmt.Errorf("expected number, got %T", v)
+	}
+}
+
+// safeInt extracts an int from an interface{} value via float64 truncation.
+func safeInt(v interface{}) (int, error) {
+	f, err := safeFloat64(v)
+	if err != nil {
+		return 0, err
+	}
+	return int(f), nil
+}
+
+// safeString extracts a string from an interface{} value safely.
+func safeString(v interface{}) (string, error) {
+	switch s := v.(type) {
+	case string:
+		return s, nil
+	case nil:
+		return "", fmt.Errorf("expected string, got nil")
+	default:
+		return "", fmt.Errorf("expected string, got %T", v)
+	}
+}
+
 func serve(r io.Reader, w io.Writer) error {
 	// notify on stderr that server started
-	fmt.Fprintln(os.Stderr, "ffi-helper: server started")
+	log.Info("server started")
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Fprintln(os.Stderr, "ffi-helper: panic:", r)
+			log.Error("panic:", r)
 		}
 	}()
 	sc := bufio.NewScanner(r)
@@ -95,11 +224,11 @@ func serve(r io.Reader, w io.Writer) error {
 			var req map[string]interface{}
 			if err := json.Unmarshal(sc.Bytes(), &req); err != nil {
 				// log invalid JSON for debugging
-				fmt.Fprintln(os.Stderr, "ffi-helper: invalid json:", string(sc.Bytes()), "err:", err)
+				log.Warn("invalid json:", string(sc.Bytes()), "err:", err)
 				resp := map[string]interface{}{"ok": false, "error": "invalid json"}
 				encMu.Lock()
 				if err := enc.Encode(resp); err != nil {
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+					log.Error("encode error:", err)
 					encMu.Unlock()
 					return
 				}
@@ -114,7 +243,7 @@ func serve(r io.Reader, w io.Writer) error {
 					ch, has := cbPending[id]
 					cbPendingMu.Unlock()
 					if has {
-						fmt.Fprintln(os.Stderr, "ffi-helper: got cb response id=", id, "resp=", req)
+						log.Debug("got cb response id=", id, "resp=", req)
 						select {
 						case ch <- req:
 						default:
@@ -140,16 +269,16 @@ func serve(r io.Reader, w io.Writer) error {
 			cbPendingMu.Unlock()
 			encMu.Lock()
 			if err := enc.Encode(m); err != nil {
-				fmt.Fprintln(os.Stderr, "ffi-helper: failed to send invoke_callback to fig:", err)
+				log.Error("failed to send invoke_callback to fig:", err)
 				ch <- map[string]interface{}{"ok": false, "error": err.Error()}
 				encMu.Unlock()
 			} else {
-				fmt.Fprintln(os.Stderr, "ffi-helper: req invoke_callback id=", id)
+				log.Debug("req invoke_callback id=", id)
 				encMu.Unlock()
 			}
 			select {
 			case r := <-ch:
-				fmt.Fprintln(os.Stderr, "ffi-helper: cb goroutine received response id=", id, "resp=", r)
+				log.Debug("cb goroutine received response id=", id, "resp=", r)
 				req.resp <- r
 			case <-time.After(3 * time.Second):
 				req.resp <- map[string]interface{}{"ok": false, "error": "timeout"}
@@ -161,300 +290,390 @@ func serve(r io.Reader, w io.Writer) error {
 	}()
 
 	// in-memory state for load/sym/call
-	var nextHandle int64 = 1
+	var nextHandle uint64 = 0
 
-	symbols := map[int64]map[string]int64{}
-	var nextSymbol int64 = 1
-	ptrs := map[int64]unsafe.Pointer{}
-	symbolByID := map[int64]unsafe.Pointer{}
-	symbolTypeByID := map[int64]string{}
+	symbols := map[string]map[string]string{}
+	var nextSymbol uint64 = 0
+	ptrs := map[string]unsafe.Pointer{}
+	symbolByID := map[string]unsafe.Pointer{}
+	symbolTypeByID := map[string]string{}
 
 	for req := range reqCh {
 		cmd, _ := req["cmd"].(string)
 		id := req["id"]
-		fmt.Fprintln(os.Stderr, "ffi-helper: req", cmd, "id=", id)
-		switch cmd {
-		case "ping":
-			resp := map[string]interface{}{"ok": true, "resp": "pong"}
+		log.Debug("req", cmd, "id=", id)
+
+		// sendErr sends a structured error response for the current request
+		sendErr := func(code string, msg string) {
+			resp := map[string]interface{}{
+				"ok": false,
+				"error": map[string]interface{}{
+					"code":    code,
+					"message": msg,
+				},
+			}
 			if id != nil {
 				resp["id"] = id
 			}
 			encMu.Lock()
+			enc.Encode(resp)
+			encMu.Unlock()
+		}
+
+		// sendOK sends a success response with the given result payload
+		sendOK := func(result interface{}) error {
+			resp := map[string]interface{}{"ok": true, "result": result}
+			if id != nil {
+				resp["id"] = id
+			}
+			encMu.Lock()
+			defer encMu.Unlock()
 			if err := enc.Encode(resp); err != nil {
-				encMu.Unlock()
-				fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+				log.Error("encode error:", err)
 				return err
 			}
-			encMu.Unlock()
+			return nil
+		}
+		_ = sendErr // avoid unused warning in branches that don't use it
+
+		switch cmd {
+		case "ping":
+			if err := sendOK("pong"); err != nil {
+				return err
+			}
+		case "handshake":
+			clientVer, _ := req["version"].(string)
+			log.Info("handshake from client version=", clientVer)
+			supportedOps := []string{
+				"ping", "handshake", "load", "sym", "call", "alloc", "free",
+				"strdup", "mem_write", "mem_read", "sleep", "crash",
+			}
+			result := map[string]interface{}{
+				"version":       FFIProtocolVersion,
+				"supported_ops": supportedOps,
+			}
+			if err := sendOK(result); err != nil {
+				return err
+			}
 		case "sleep":
 			msf, _ := req["ms"].(float64)
 			ms := int(msf)
-			fmt.Fprintln(os.Stderr, "ffi-helper: sleeping", ms, "ms")
+			log.Debug("sleeping", ms, "ms")
 			time.Sleep(time.Duration(ms) * time.Millisecond)
-			resp := map[string]interface{}{"ok": true, "resp": "slept"}
-			if id != nil {
-				resp["id"] = id
-			}
-			encMu.Lock()
-			if err := enc.Encode(resp); err != nil {
-				encMu.Unlock()
-				fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+			if err := sendOK("slept"); err != nil {
 				return err
 			}
-			encMu.Unlock()
 		case "crash":
-			fmt.Fprintln(os.Stderr, "ffi-helper: crashing as requested")
+			log.Warn("crashing as requested")
 			os.Exit(1)
 		case "load":
 			// load via dlopen
 			p, _ := req["path"].(string)
 			if p == "" {
-				resp := map[string]interface{}{"ok": false, "error": "missing path"}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				enc.Encode(resp)
-				encMu.Unlock()
+				sendErr(ErrMissingParam, "missing path")
 				continue
 			}
 			cp := C.CString(p)
-			defer C.free(unsafe.Pointer(cp))
 			hdl := C.dl_open(cp)
+			C.free(unsafe.Pointer(cp))
 			if hdl == nil {
 				errstr := C.GoString(C.dl_error())
-				resp := map[string]interface{}{"ok": false, "error": fmt.Sprintf("dlopen failed: %s", errstr)}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrDlopenFailed, fmt.Sprintf("dlopen failed: %s", errstr))
 				continue
 			}
-			handle := nextHandle
 			nextHandle++
+			handle := fmt.Sprintf("lib-%d", nextHandle)
 			if symbols[handle] == nil {
-				symbols[handle] = map[string]int64{}
+				symbols[handle] = map[string]string{}
 			}
 			ptrs[handle] = unsafe.Pointer(hdl)
-			resp := map[string]interface{}{"ok": true, "handle": handle}
-			if id != nil {
-				resp["id"] = id
-			}
-			if err := enc.Encode(resp); err != nil {
-				fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+			if err := sendOK(map[string]interface{}{"handle": handle}); err != nil {
 				return err
 			}
 		case "sym":
-			h, _ := req["handle"].(float64)
+			hid, _ := req["handle"].(string)
 			name, _ := req["name"].(string)
 			rtype, _ := req["rtype"].(string)
 			if rtype == "" {
 				rtype = "int"
 			}
-			hid := int64(h)
 			if _, ok := symbols[hid]; !ok {
-				resp := map[string]interface{}{"ok": false, "error": "invalid handle"}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrInvalidHandle, "invalid handle")
 				continue
 			}
 			cname := C.CString(name)
-			defer C.free(unsafe.Pointer(cname))
 			sym := C.dl_sym(C.dl_handle(ptrs[hid]), cname)
+			C.free(unsafe.Pointer(cname))
 			if sym == nil {
 				errstr := C.GoString(C.dl_error())
-				resp := map[string]interface{}{"ok": false, "error": fmt.Sprintf("dlsym failed: %s", errstr)}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrDlsymFailed, fmt.Sprintf("dlsym failed: %s", errstr))
 				continue
 			}
-			sid := nextSymbol
 			nextSymbol++
+			sid := fmt.Sprintf("sym-%d", nextSymbol)
 			symbols[hid][name] = sid
 			symbolByID[sid] = unsafe.Pointer(sym)
 			symbolTypeByID[sid] = rtype
-			resp := map[string]interface{}{"ok": true, "symbol": sid}
-			if id != nil {
-				resp["id"] = id
-			}
-			encMu.Lock()
-			if err := enc.Encode(resp); err != nil {
-				encMu.Unlock()
-				fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+			if err := sendOK(map[string]interface{}{"symbol": sid}); err != nil {
 				return err
 			}
-			encMu.Unlock()
 		case "call":
 			// if a symbol id is provided, route to C function
 			if symRaw, ok := req["symbol"]; ok {
-				sid := int64(symRaw.(float64))
+				sid, sidOk := symRaw.(string)
+				if !sidOk || sid == "" {
+					sendErr(ErrTypeError, "type error: symbol must be a string")
+					continue
+				}
 				ptr := symbolByID[sid]
 				if ptr == nil {
-					resp := map[string]interface{}{"ok": false, "error": "invalid symbol"}
-					if id != nil {
-						resp["id"] = id
-					}
-					encMu.Lock()
-					if err := enc.Encode(resp); err != nil {
-						encMu.Unlock()
-						fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-						return err
-					}
-					encMu.Unlock()
+					sendErr(ErrInvalidSymbol, "invalid symbol")
 					continue
 				}
 				rtype := symbolTypeByID[sid]
 				args, _ := req["args"].([]interface{})
 				switch rtype {
 				case "int":
+					// read arg_types metadata for mixed-type dispatch
+					var intArgTypes []string
+					if atRaw, ok := req["arg_types"].([]interface{}); ok {
+						for _, v := range atRaw {
+							if s, ok := v.(string); ok {
+								intArgTypes = append(intArgTypes, s)
+							}
+						}
+					}
+					// helper: check if type is string-like
+					isStrType := func(t string) bool {
+						return t == "string" || t == "str"
+					}
+					isIntType := func(t string) bool {
+						return t == "int" || t == "integer"
+					}
+
 					if len(args) == 0 {
 						res := C.ffi_call_int_fn0(ptr)
-						resp := map[string]interface{}{"ok": true, "resp": float64(res)}
-						if id != nil {
-							resp["id"] = id
-						}
-						encMu.Lock()
-						if err := enc.Encode(resp); err != nil {
-							encMu.Unlock()
-							fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+						if err := sendOK(float64(res)); err != nil {
 							return err
 						}
-						encMu.Unlock()
 					} else if len(args) == 1 {
-						a := C.int(int(args[0].(float64)))
-						res := C.ffi_call_int_fn1(ptr, a)
-						resp := map[string]interface{}{"ok": true, "resp": float64(res)}
-						if id != nil {
-							resp["id"] = id
+						// check arg_types for mixed dispatch
+						if len(intArgTypes) >= 1 && isStrType(intArgTypes[0]) {
+							s0, ok := args[0].(string)
+							if !ok {
+								sendErr(ErrTypeError, fmt.Sprintf("type error: arg 0: expected string, got %T", args[0]))
+								continue
+							}
+							cs := C.CString(s0)
+							res := C.ffi_call_int_fn1_str(ptr, cs)
+							C.free(unsafe.Pointer(cs))
+							if err := sendOK(float64(res)); err != nil {
+								return err
+							}
+						} else {
+							a0, aErr := safeInt(args[0])
+							if aErr != nil {
+								sendErr(ErrTypeError, fmt.Sprintf("type error: arg 0: %v", aErr))
+								continue
+							}
+							a := C.int(a0)
+							res := C.ffi_call_int_fn1(ptr, a)
+							if err := sendOK(float64(res)); err != nil {
+								return err
+							}
 						}
-						encMu.Lock()
-						if err := enc.Encode(resp); err != nil {
-							encMu.Unlock()
-							fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-							return err
-						}
-						encMu.Unlock()
 					} else if len(args) == 2 {
-						a := C.int(int(args[0].(float64)))
-						b := C.int(int(args[1].(float64)))
-						res := C.ffi_call_int_fn(ptr, a, b)
-						resp := map[string]interface{}{"ok": true, "resp": float64(res)}
-						if id != nil {
-							resp["id"] = id
+						// build type signature from arg_types
+						sig := ""
+						if len(intArgTypes) >= 2 {
+							for _, t := range intArgTypes {
+								if isStrType(t) {
+									sig += "s"
+								} else if isIntType(t) {
+									sig += "i"
+								} else {
+									sig += "i" // default to int
+								}
+							}
+						} else {
+							sig = "ii" // default: both int
 						}
-						encMu.Lock()
-						if err := enc.Encode(resp); err != nil {
-							encMu.Unlock()
-							fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-							return err
+						switch sig {
+						case "ss":
+							s0, ok0 := args[0].(string)
+							s1, ok1 := args[1].(string)
+							if !ok0 || !ok1 {
+								sendErr(ErrTypeError, "type error: expected string args for int(str,str) call")
+								continue
+							}
+							cs0 := C.CString(s0)
+							cs1 := C.CString(s1)
+							res := C.ffi_call_int_fn2_str_str(ptr, cs0, cs1)
+							C.free(unsafe.Pointer(cs0))
+							C.free(unsafe.Pointer(cs1))
+							if err := sendOK(float64(res)); err != nil {
+								return err
+							}
+						case "si":
+							s0, ok0 := args[0].(string)
+							if !ok0 {
+								sendErr(ErrTypeError, "type error: expected string for arg 0")
+								continue
+							}
+							i1, iErr := safeInt(args[1])
+							if iErr != nil {
+								sendErr(ErrTypeError, fmt.Sprintf("type error: arg 1: %v", iErr))
+								continue
+							}
+							cs0 := C.CString(s0)
+							res := C.ffi_call_int_fn2_str_int(ptr, cs0, C.int(i1))
+							C.free(unsafe.Pointer(cs0))
+							if err := sendOK(float64(res)); err != nil {
+								return err
+							}
+						case "is":
+							i0, iErr := safeInt(args[0])
+							if iErr != nil {
+								sendErr(ErrTypeError, fmt.Sprintf("type error: arg 0: %v", iErr))
+								continue
+							}
+							s1, ok1 := args[1].(string)
+							if !ok1 {
+								sendErr(ErrTypeError, "type error: expected string for arg 1")
+								continue
+							}
+							cs1 := C.CString(s1)
+							res := C.ffi_call_int_fn2_int_str(ptr, C.int(i0), cs1)
+							C.free(unsafe.Pointer(cs1))
+							if err := sendOK(float64(res)); err != nil {
+								return err
+							}
+						default: // "ii"
+							a0, aErr := safeInt(args[0])
+							if aErr != nil {
+								sendErr(ErrTypeError, fmt.Sprintf("type error: arg 0: %v", aErr))
+								continue
+							}
+							b0, bErr := safeInt(args[1])
+							if bErr != nil {
+								sendErr(ErrTypeError, fmt.Sprintf("type error: arg 1: %v", bErr))
+								continue
+							}
+							a := C.int(a0)
+							b := C.int(b0)
+							res := C.ffi_call_int_fn(ptr, a, b)
+							if err := sendOK(float64(res)); err != nil {
+								return err
+							}
 						}
-						encMu.Unlock()
 					} else if len(args) == 3 {
-						a := C.int(int(args[0].(float64)))
-						b := C.int(int(args[1].(float64)))
-						c := C.int(int(args[2].(float64)))
+						a0, aErr := safeInt(args[0])
+						if aErr != nil {
+							sendErr(ErrTypeError, fmt.Sprintf("type error: arg 0: %v", aErr))
+							continue
+						}
+						b0, bErr := safeInt(args[1])
+						if bErr != nil {
+							sendErr(ErrTypeError, fmt.Sprintf("type error: arg 1: %v", bErr))
+							continue
+						}
+						c0, cErr := safeInt(args[2])
+						if cErr != nil {
+							sendErr(ErrTypeError, fmt.Sprintf("type error: arg 2: %v", cErr))
+							continue
+						}
+						a := C.int(a0)
+						b := C.int(b0)
+						c := C.int(c0)
 						res := C.ffi_call_int_fn3(ptr, a, b, c)
-						resp := map[string]interface{}{"ok": true, "resp": float64(res)}
-						if id != nil {
-							resp["id"] = id
-						}
-						encMu.Lock()
-						if err := enc.Encode(resp); err != nil {
-							encMu.Unlock()
-							fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+						if err := sendOK(float64(res)); err != nil {
 							return err
 						}
-						encMu.Unlock()
+					} else if len(args) == 4 {
+						// build type signature from arg_types (expect iisi for bind_text)
+						sig := ""
+						if len(intArgTypes) >= 4 {
+							for i := 0; i < 4; i++ {
+								if isStrType(intArgTypes[i]) {
+									sig += "s"
+								} else if isIntType(intArgTypes[i]) {
+									sig += "i"
+								} else {
+									sig += "i"
+								}
+							}
+						}
+						switch sig {
+						case "iisi":
+							i0, i0Err := safeInt(args[0])
+							if i0Err != nil {
+								sendErr(ErrTypeError, fmt.Sprintf("type error: arg 0: %v", i0Err))
+								continue
+							}
+							i1, i1Err := safeInt(args[1])
+							if i1Err != nil {
+								sendErr(ErrTypeError, fmt.Sprintf("type error: arg 1: %v", i1Err))
+								continue
+							}
+							s2, ok2 := args[2].(string)
+							if !ok2 {
+								sendErr(ErrTypeError, "type error: expected string for arg 2")
+								continue
+							}
+							i3, i3Err := safeInt(args[3])
+							if i3Err != nil {
+								sendErr(ErrTypeError, fmt.Sprintf("type error: arg 3: %v", i3Err))
+								continue
+							}
+							cs2 := C.CString(s2)
+							res := C.ffi_call_int_fn4_iisi(ptr, C.int(i0), C.int(i1), cs2, C.int(i3))
+							C.free(unsafe.Pointer(cs2))
+							if err := sendOK(float64(res)); err != nil {
+								return err
+							}
+						default:
+							sendErr(ErrUnsupportedArgs, fmt.Sprintf("unsupported 4-arg int signature: %s", sig))
+							continue
+						}
 					} else {
-						resp := map[string]interface{}{"ok": false, "error": fmt.Sprintf("int call with %d args not supported", len(args))}
-						if id != nil {
-							resp["id"] = id
-						}
-						encMu.Lock()
-						if err := enc.Encode(resp); err != nil {
-							encMu.Unlock()
-							fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-							return err
-						}
-						encMu.Unlock()
+						sendErr(ErrUnsupportedArgs, fmt.Sprintf("int call with %d args not supported", len(args)))
 					}
 				case "double":
 					if len(args) == 0 {
 						res := C.ffi_call_double_fn0(ptr)
-						resp := map[string]interface{}{"ok": true, "resp": float64(res)}
-						if id != nil {
-							resp["id"] = id
-						}
-						encMu.Lock()
-						if err := enc.Encode(resp); err != nil {
-							encMu.Unlock()
-							fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+						if err := sendOK(float64(res)); err != nil {
 							return err
 						}
-						encMu.Unlock()
 					} else if len(args) == 1 {
-						a := C.double(args[0].(float64))
+						a0, aErr := safeFloat64(args[0])
+						if aErr != nil {
+							sendErr(ErrTypeError, fmt.Sprintf("type error: arg 0: %v", aErr))
+							continue
+						}
+						a := C.double(a0)
 						res := C.ffi_call_double_fn1(ptr, a)
-						resp := map[string]interface{}{"ok": true, "resp": float64(res)}
-						if id != nil {
-							resp["id"] = id
-						}
-						encMu.Lock()
-						if err := enc.Encode(resp); err != nil {
-							encMu.Unlock()
-							fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+						if err := sendOK(float64(res)); err != nil {
 							return err
 						}
-						encMu.Unlock()
 					} else if len(args) == 2 {
-						a := C.double(args[0].(float64))
-						b := C.double(args[1].(float64))
+						a0, aErr := safeFloat64(args[0])
+						if aErr != nil {
+							sendErr(ErrTypeError, fmt.Sprintf("type error: arg 0: %v", aErr))
+							continue
+						}
+						b0, bErr := safeFloat64(args[1])
+						if bErr != nil {
+							sendErr(ErrTypeError, fmt.Sprintf("type error: arg 1: %v", bErr))
+							continue
+						}
+						a := C.double(a0)
+						b := C.double(b0)
 						res := C.ffi_call_double_fn(ptr, a, b)
-						resp := map[string]interface{}{"ok": true, "resp": float64(res)}
-						if id != nil {
-							resp["id"] = id
-						}
-						encMu.Lock()
-						if err := enc.Encode(resp); err != nil {
-							encMu.Unlock()
-							fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+						if err := sendOK(float64(res)); err != nil {
 							return err
 						}
-						encMu.Unlock()
 					} else {
-						resp := map[string]interface{}{"ok": false, "error": fmt.Sprintf("double call with %d args not supported", len(args))}
-						if id != nil {
-							resp["id"] = id
-						}
-						encMu.Lock()
-						if err := enc.Encode(resp); err != nil {
-							encMu.Unlock()
-							fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-							return err
-						}
-						encMu.Unlock()
+						sendErr(ErrUnsupportedArgs, fmt.Sprintf("double call with %d args not supported", len(args)))
 					}
 				case "void":
 					// void return type — call function and return nil
@@ -469,13 +688,7 @@ func serve(r io.Reader, w io.Writer) error {
 							C.ffi_call_void_fn1_str(ptr, cs)
 							C.free(unsafe.Pointer(cs))
 						} else {
-							resp := map[string]interface{}{"ok": false, "error": "void: unsupported arg type"}
-							if id != nil {
-								resp["id"] = id
-							}
-							encMu.Lock()
-							enc.Encode(resp)
-							encMu.Unlock()
+							sendErr(ErrUnsupportedArgs, "void: unsupported arg type")
 							continue
 						}
 					} else if len(args) == 2 {
@@ -488,346 +701,301 @@ func serve(r io.Reader, w io.Writer) error {
 							C.free(unsafe.Pointer(cs0))
 							C.free(unsafe.Pointer(cs1))
 						} else {
-							resp := map[string]interface{}{"ok": false, "error": "void: unsupported 2-arg combination"}
-							if id != nil {
-								resp["id"] = id
-							}
-							encMu.Lock()
-							enc.Encode(resp)
-							encMu.Unlock()
+							sendErr(ErrUnsupportedArgs, "void: unsupported 2-arg combination")
 							continue
 						}
 					} else {
-						resp := map[string]interface{}{"ok": false, "error": fmt.Sprintf("void call with %d args not supported", len(args))}
-						if id != nil {
-							resp["id"] = id
-						}
-						encMu.Lock()
-						enc.Encode(resp)
-						encMu.Unlock()
+						sendErr(ErrUnsupportedArgs, fmt.Sprintf("void call with %d args not supported", len(args)))
 						continue
 					}
-					resp := map[string]interface{}{"ok": true, "resp": nil}
-					if id != nil {
-						resp["id"] = id
-					}
-					encMu.Lock()
-					if err := enc.Encode(resp); err != nil {
-						encMu.Unlock()
-						fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+					if err := sendOK(nil); err != nil {
 						return err
 					}
-					encMu.Unlock()
 				case "string", "str":
-					var toFree []*C.char
-					defer func() {
-						for _, p := range toFree {
-							C.free(unsafe.Pointer(p))
-						}
-					}()
-					// helper to extract a C string from a value (string, callback, mem ptr, or map→JSON)
-					extract := func(x interface{}) (*C.char, error) {
-						if s, ok := x.(string); ok {
-							cs := C.CString(s)
-							toFree = append(toFree, cs)
-							return cs, nil
-						}
-						if m, ok := x.(map[string]interface{}); ok {
-							if cbid, ok := m["__cb__"].(string); ok {
-								cs := C.CString(cbid)
+					if err := func() error {
+						var toFree []*C.char
+						defer func() {
+							for _, p := range toFree {
+								C.free(unsafe.Pointer(p))
+							}
+						}()
+						// helper to extract a C string from a value (string, callback, mem ptr, or map→JSON)
+						extract := func(x interface{}) (*C.char, error) {
+							if s, ok := x.(string); ok {
+								cs := C.CString(s)
 								toFree = append(toFree, cs)
 								return cs, nil
 							}
-							if mid, ok := m["__mem__"].(string); ok {
-								memMu.Lock()
-								p, has := memByID[mid]
-								memMu.Unlock()
-								if has && p != nil {
-									return (*C.char)(p), nil
+							if m, ok := x.(map[string]interface{}); ok {
+								if cbid, ok := m["__cb__"].(string); ok {
+									cs := C.CString(cbid)
+									toFree = append(toFree, cs)
+									return cs, nil
 								}
-								return nil, fmt.Errorf("invalid memory id: %s", mid)
+								if mid, ok := m["__mem__"].(string); ok {
+									memMu.Lock()
+									p, has := memByID[mid]
+									memMu.Unlock()
+									if has && p != nil {
+										return (*C.char)(p), nil
+									}
+									return nil, fmt.Errorf("invalid memory id: %s", mid)
+								}
+								// generic map → JSON string
+								js, err := json.Marshal(m)
+								if err != nil {
+									return nil, fmt.Errorf("cannot marshal object to json: %v", err)
+								}
+								cs := C.CString(string(js))
+								toFree = append(toFree, cs)
+								return cs, nil
 							}
-							// generic map → JSON string
-							js, err := json.Marshal(m)
-							if err != nil {
-								return nil, fmt.Errorf("cannot marshal object to json: %v", err)
-							}
-							cs := C.CString(string(js))
-							toFree = append(toFree, cs)
-							return cs, nil
-						}
-						return nil, fmt.Errorf("expected string or callback object")
-					}
-
-					// read arg_types metadata if provided
-					var argTypesList []string
-					if atRaw, ok := req["arg_types"].([]interface{}); ok {
-						for _, v := range atRaw {
-							if s, ok := v.(string); ok {
-								argTypesList = append(argTypesList, s)
-							}
-						}
-					}
-
-					var cres *C.char
-					// dispatch based on arg count and types
-					if len(args) == 0 {
-						cres = C.ffi_call_str_fn0(ptr)
-					} else {
-						// extract arg0 (always a string-like value for 1+ arg calls)
-						arg0Str, err := extract(args[0])
-						if err != nil {
-							resp := map[string]interface{}{"ok": false, "error": err.Error()}
-							if id != nil {
-								resp["id"] = id
-							}
-							if err := enc.Encode(resp); err != nil {
-								fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-								return err
-							}
-							continue
+							return nil, fmt.Errorf("expected string or callback object")
 						}
 
-						if len(args) == 1 {
-							cres = C.ffi_call_str_fn1(ptr, arg0Str)
-						} else if len(args) == 2 {
-							a1Str, err := extract(args[1])
-							if err != nil {
-								resp := map[string]interface{}{"ok": false, "error": err.Error()}
-								if id != nil {
-									resp["id"] = id
-								}
-								if err := enc.Encode(resp); err != nil {
-									fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-									return err
-								}
-								continue
-							}
-							cres = C.ffi_call_str_fn2(ptr, arg0Str, a1Str)
-						} else if len(args) == 3 {
-							if len(argTypesList) == 3 {
-								t1 := argTypesList[1]
-								t2 := argTypesList[2]
-								isInt1 := t1 == "int" || t1 == "integer"
-								isInt2 := t2 == "int" || t2 == "integer"
-								isNum2 := t2 == "number" || t2 == "double" || t2 == "float"
-								if isInt1 && isInt2 {
-									n1 := int(args[1].(float64))
-									n2 := int(args[2].(float64))
-									cres = C.ffi_call_str_fn3_intint(ptr, arg0Str, C.int(n1), C.int(n2))
-								} else if isInt1 && isNum2 {
-									n1 := int(args[1].(float64))
-									n2 := args[2].(float64)
-									cres = C.ffi_call_str_fn3(ptr, arg0Str, C.int(n1), C.double(n2))
-								} else {
-									a1Str, err := extract(args[1])
-									if err != nil {
-										resp := map[string]interface{}{"ok": false, "error": err.Error()}
-										if id != nil {
-											resp["id"] = id
-										}
-										if err := enc.Encode(resp); err != nil {
-											fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-											return err
-										}
-										continue
-									}
-									a2Str, err := extract(args[2])
-									if err != nil {
-										resp := map[string]interface{}{"ok": false, "error": err.Error()}
-										if id != nil {
-											resp["id"] = id
-										}
-										if err := enc.Encode(resp); err != nil {
-											fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-											return err
-										}
-										continue
-									}
-									cres = C.ffi_call_str_fn3_strs(ptr, arg0Str, a1Str, a2Str)
-								}
-							} else {
-								_, isStr1 := args[1].(string)
-								_, isMap1 := args[1].(map[string]interface{})
-								_, isStr2 := args[2].(string)
-								_, isMap2 := args[2].(map[string]interface{})
-								n1, isNum1 := args[1].(float64)
-								n2, isNum2 := args[2].(float64)
-								if (isStr1 || isMap1) && (isStr2 || isMap2) {
-									a1Str, err := extract(args[1])
-									if err != nil {
-										resp := map[string]interface{}{"ok": false, "error": err.Error()}
-										if id != nil {
-											resp["id"] = id
-										}
-										if err := enc.Encode(resp); err != nil {
-											fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-											return err
-										}
-										continue
-									}
-									a2Str, err := extract(args[2])
-									if err != nil {
-										resp := map[string]interface{}{"ok": false, "error": err.Error()}
-										if id != nil {
-											resp["id"] = id
-										}
-										if err := enc.Encode(resp); err != nil {
-											fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-											return err
-										}
-										continue
-									}
-									cres = C.ffi_call_str_fn3_strs(ptr, arg0Str, a1Str, a2Str)
-								} else if isNum1 && isNum2 {
-									cres = C.ffi_call_str_fn3_intint(ptr, arg0Str, C.int(int(n1)), C.int(int(n2)))
-								} else {
-									resp := map[string]interface{}{"ok": false, "error": fmt.Sprintf("unsupported 3-arg string call: arg types %T, %T, %T", args[0], args[1], args[2])}
-									if id != nil {
-										resp["id"] = id
-									}
-									if err := enc.Encode(resp); err != nil {
-										fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-										return err
-									}
-									continue
+						// read arg_types metadata if provided
+						var argTypesList []string
+						if atRaw, ok := req["arg_types"].([]interface{}); ok {
+							for _, v := range atRaw {
+								if s, ok := v.(string); ok {
+									argTypesList = append(argTypesList, s)
 								}
 							}
-						} else if len(args) == 4 {
-							// 4-arg string call: dispatch based on arg_types
-							if len(argTypesList) == 4 {
-								sig := ""
-								for _, t := range argTypesList {
-									switch {
-									case t == "string" || t == "str":
-										sig += "s"
-									case t == "int" || t == "integer":
-										sig += "i"
-									case t == "double" || t == "float" || t == "number":
-										sig += "d"
-									default:
-										sig += "?"
-									}
-								}
-								switch sig {
-								case "sisi":
-									a2Str, err := extract(args[2])
-									if err != nil {
-										resp := map[string]interface{}{"ok": false, "error": err.Error()}
-										if id != nil {
-											resp["id"] = id
-										}
-										if err := enc.Encode(resp); err != nil {
-											fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-											return err
-										}
-										continue
-									}
-									cres = C.ffi_call_str_fn4_sisi(ptr, arg0Str, C.int(int(args[1].(float64))), a2Str, C.int(int(args[3].(float64))))
-								case "ssss":
-									a1Str, err := extract(args[1])
-									if err != nil {
-										resp := map[string]interface{}{"ok": false, "error": err.Error()}
-										if id != nil {
-											resp["id"] = id
-										}
-										if err := enc.Encode(resp); err != nil {
-											fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-											return err
-										}
-										continue
-									}
-									a2Str, err := extract(args[2])
-									if err != nil {
-										resp := map[string]interface{}{"ok": false, "error": err.Error()}
-										if id != nil {
-											resp["id"] = id
-										}
-										if err := enc.Encode(resp); err != nil {
-											fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-											return err
-										}
-										continue
-									}
-									a3Str, err := extract(args[3])
-									if err != nil {
-										resp := map[string]interface{}{"ok": false, "error": err.Error()}
-										if id != nil {
-											resp["id"] = id
-										}
-										if err := enc.Encode(resp); err != nil {
-											fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-											return err
-										}
-										continue
-									}
-									cres = C.ffi_call_str_fn4_ssss(ptr, arg0Str, a1Str, a2Str, a3Str)
-								case "siid":
-									cres = C.ffi_call_str_fn4_siid(ptr, arg0Str, C.int(int(args[1].(float64))), C.int(int(args[2].(float64))), C.double(args[3].(float64)))
-								default:
-									resp := map[string]interface{}{"ok": false, "error": fmt.Sprintf("unsupported 4-arg string signature: %s", sig)}
-									if id != nil {
-										resp["id"] = id
-									}
-									if err := enc.Encode(resp); err != nil {
-										fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-										return err
-									}
-									continue
-								}
-							} else {
-								resp := map[string]interface{}{"ok": false, "error": "4-arg string call requires arg_types metadata"}
-								if id != nil {
-									resp["id"] = id
-								}
-								if err := enc.Encode(resp); err != nil {
-									fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-									return err
-								}
-								continue
-							}
+						}
+
+						var cres *C.char
+						// dispatch based on arg count and types
+						if len(args) == 0 {
+							cres = C.ffi_call_str_fn0(ptr)
 						} else {
-							resp := map[string]interface{}{"ok": false, "error": fmt.Sprintf("string call with %d args not supported", len(args))}
-							if id != nil {
-								resp["id"] = id
+							if len(args) == 1 {
+								// extract arg0 (string-like)
+								arg0Str, err := extract(args[0])
+								if err != nil {
+									sendErr(ErrTypeError, err.Error())
+									return nil
+								}
+								cres = C.ffi_call_str_fn1(ptr, arg0Str)
+							} else if len(args) == 2 {
+								if len(argTypesList) == 2 {
+									isInt0 := argTypesList[0] == "int" || argTypesList[0] == "integer"
+									isInt1 := argTypesList[1] == "int" || argTypesList[1] == "integer"
+									if isInt0 && isInt1 {
+										n0, n0Err := safeInt(args[0])
+										if n0Err != nil {
+											sendErr(ErrTypeError, fmt.Sprintf("type error: arg 0: %v", n0Err))
+											return nil
+										}
+										n1, n1Err := safeInt(args[1])
+										if n1Err != nil {
+											sendErr(ErrTypeError, fmt.Sprintf("type error: arg 1: %v", n1Err))
+											return nil
+										}
+										cres = C.ffi_call_str_fn2_intint(ptr, C.int(n0), C.int(n1))
+									} else {
+										arg0Str, err := extract(args[0])
+										if err != nil {
+											sendErr(ErrTypeError, err.Error())
+											return nil
+										}
+										a1Str, err := extract(args[1])
+										if err != nil {
+											sendErr(ErrTypeError, err.Error())
+											return nil
+										}
+										cres = C.ffi_call_str_fn2(ptr, arg0Str, a1Str)
+									}
+								} else {
+									arg0Str, err := extract(args[0])
+									if err != nil {
+										sendErr(ErrTypeError, err.Error())
+										return nil
+									}
+									a1Str, err := extract(args[1])
+									if err != nil {
+										sendErr(ErrTypeError, err.Error())
+										return nil
+									}
+									cres = C.ffi_call_str_fn2(ptr, arg0Str, a1Str)
+								}
+							} else if len(args) == 3 {
+								// extract arg0 (string-like)
+								arg0Str, err := extract(args[0])
+								if err != nil {
+									sendErr(ErrTypeError, err.Error())
+									return nil
+								}
+								if len(argTypesList) == 3 {
+									t1 := argTypesList[1]
+									t2 := argTypesList[2]
+									isInt1 := t1 == "int" || t1 == "integer"
+									isInt2 := t2 == "int" || t2 == "integer"
+									isNum2 := t2 == "number" || t2 == "double" || t2 == "float"
+									if isInt1 && isInt2 {
+										n1, n1Err := safeInt(args[1])
+										if n1Err != nil {
+											sendErr(ErrTypeError, fmt.Sprintf("type error: arg 1: %v", n1Err))
+											return nil
+										}
+										n2, n2Err := safeInt(args[2])
+										if n2Err != nil {
+											sendErr(ErrTypeError, fmt.Sprintf("type error: arg 2: %v", n2Err))
+											return nil
+										}
+										cres = C.ffi_call_str_fn3_intint(ptr, arg0Str, C.int(n1), C.int(n2))
+									} else if isInt1 && isNum2 {
+										n1, n1Err := safeInt(args[1])
+										if n1Err != nil {
+											sendErr(ErrTypeError, fmt.Sprintf("type error: arg 1: %v", n1Err))
+											return nil
+										}
+										n2, n2Err := safeFloat64(args[2])
+										if n2Err != nil {
+											sendErr(ErrTypeError, fmt.Sprintf("type error: arg 2: %v", n2Err))
+											return nil
+										}
+										cres = C.ffi_call_str_fn3(ptr, arg0Str, C.int(n1), C.double(n2))
+									} else {
+										a1Str, err := extract(args[1])
+										if err != nil {
+											sendErr(ErrTypeError, err.Error())
+											return nil
+										}
+										a2Str, err := extract(args[2])
+										if err != nil {
+											sendErr(ErrTypeError, err.Error())
+											return nil
+										}
+										cres = C.ffi_call_str_fn3_strs(ptr, arg0Str, a1Str, a2Str)
+									}
+								} else {
+									_, isStr1 := args[1].(string)
+									_, isMap1 := args[1].(map[string]interface{})
+									_, isStr2 := args[2].(string)
+									_, isMap2 := args[2].(map[string]interface{})
+									n1, isNum1 := args[1].(float64)
+									n2, isNum2 := args[2].(float64)
+									if (isStr1 || isMap1) && (isStr2 || isMap2) {
+										a1Str, err := extract(args[1])
+										if err != nil {
+											sendErr(ErrTypeError, err.Error())
+											return nil
+										}
+										a2Str, err := extract(args[2])
+										if err != nil {
+											sendErr(ErrTypeError, err.Error())
+											return nil
+										}
+										cres = C.ffi_call_str_fn3_strs(ptr, arg0Str, a1Str, a2Str)
+									} else if isNum1 && isNum2 {
+										cres = C.ffi_call_str_fn3_intint(ptr, arg0Str, C.int(int(n1)), C.int(int(n2)))
+									} else {
+										sendErr(ErrUnsupportedArgs, fmt.Sprintf("unsupported 3-arg string call: arg types %T, %T, %T", args[0], args[1], args[2]))
+										return nil
+									}
+								}
+							} else if len(args) == 4 {
+								// extract arg0 (string-like)
+								arg0Str, err := extract(args[0])
+								if err != nil {
+									sendErr(ErrTypeError, err.Error())
+									return nil
+								}
+								// 4-arg string call: dispatch based on arg_types
+								if len(argTypesList) == 4 {
+									sig := ""
+									for _, t := range argTypesList {
+										switch {
+										case t == "string" || t == "str":
+											sig += "s"
+										case t == "int" || t == "integer":
+											sig += "i"
+										case t == "double" || t == "float" || t == "number":
+											sig += "d"
+										default:
+											sig += "?"
+										}
+									}
+									switch sig {
+									case "sisi":
+										n1, n1Err := safeInt(args[1])
+										if n1Err != nil {
+											sendErr(ErrTypeError, fmt.Sprintf("type error: arg 1: %v", n1Err))
+											return nil
+										}
+										a2Str, err := extract(args[2])
+										if err != nil {
+											sendErr(ErrTypeError, err.Error())
+											return nil
+										}
+										n3, n3Err := safeInt(args[3])
+										if n3Err != nil {
+											sendErr(ErrTypeError, fmt.Sprintf("type error: arg 3: %v", n3Err))
+											return nil
+										}
+										cres = C.ffi_call_str_fn4_sisi(ptr, arg0Str, C.int(n1), a2Str, C.int(n3))
+									case "ssss":
+										a1Str, err := extract(args[1])
+										if err != nil {
+											sendErr(ErrTypeError, err.Error())
+											return nil
+										}
+										a2Str, err := extract(args[2])
+										if err != nil {
+											sendErr(ErrTypeError, err.Error())
+											return nil
+										}
+										a3Str, err := extract(args[3])
+										if err != nil {
+											sendErr(ErrTypeError, err.Error())
+											return nil
+										}
+										cres = C.ffi_call_str_fn4_ssss(ptr, arg0Str, a1Str, a2Str, a3Str)
+									case "siid":
+										n1, n1Err := safeInt(args[1])
+										if n1Err != nil {
+											sendErr(ErrTypeError, fmt.Sprintf("type error: arg 1: %v", n1Err))
+											return nil
+										}
+										n2, n2Err := safeInt(args[2])
+										if n2Err != nil {
+											sendErr(ErrTypeError, fmt.Sprintf("type error: arg 2: %v", n2Err))
+											return nil
+										}
+										n3, n3Err := safeFloat64(args[3])
+										if n3Err != nil {
+											sendErr(ErrTypeError, fmt.Sprintf("type error: arg 3: %v", n3Err))
+											return nil
+										}
+										cres = C.ffi_call_str_fn4_siid(ptr, arg0Str, C.int(n1), C.int(n2), C.double(n3))
+									default:
+										sendErr(ErrUnsupportedArgs, fmt.Sprintf("unsupported 4-arg string signature: %s", sig))
+										return nil
+									}
+								} else {
+									sendErr(ErrUnsupportedArgs, "4-arg string call requires arg_types metadata")
+									return nil
+								}
+							} else {
+								sendErr(ErrUnsupportedArgs, fmt.Sprintf("string call with %d args not supported", len(args)))
+								return nil
 							}
-							if err := enc.Encode(resp); err != nil {
-								fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-								return err
-							}
-							continue
+						} // end of 0-arg vs 1+ arg dispatch
+						if cres == nil {
+							sendErr(ErrCallFailed, "call returned NULL")
+							return nil
 						}
-					} // end of 0-arg vs 1+ arg dispatch
-					if cres == nil {
-						resp := map[string]interface{}{"ok": false, "error": "call returned NULL"}
-						if id != nil {
-							resp["id"] = id
-						}
-						if err := enc.Encode(resp); err != nil {
-							fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+						goStr := C.GoString(cres)
+						C.free(unsafe.Pointer(cres))
+						if err := sendOK(goStr); err != nil {
 							return err
 						}
-						continue
-					}
-					goStr := C.GoString(cres)
-					C.free(unsafe.Pointer(cres))
-					resp := map[string]interface{}{"ok": true, "resp": goStr}
-					if id != nil {
-						resp["id"] = id
-					}
-					if err := enc.Encode(resp); err != nil {
-						fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+						return nil
+					}(); err != nil {
 						return err
 					}
 				default:
-					resp := map[string]interface{}{"ok": false, "error": "unsupported symbol type"}
-					if id != nil {
-						resp["id"] = id
-					}
-					if err := enc.Encode(resp); err != nil {
-						fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-						return err
-					}
+					sendErr(ErrUnsupportedArgs, "unsupported symbol type")
 				}
 			} else {
 				// fallback: sum/echo as before
@@ -843,21 +1011,11 @@ func serve(r io.Reader, w io.Writer) error {
 					}
 				}
 				if num {
-					resp := map[string]interface{}{"ok": true, "resp": sum}
-					if id != nil {
-						resp["id"] = id
-					}
-					if err := enc.Encode(resp); err != nil {
-						fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+					if err := sendOK(sum); err != nil {
 						return err
 					}
 				} else {
-					resp := map[string]interface{}{"ok": true, "resp": args}
-					if id != nil {
-						resp["id"] = id
-					}
-					if err := enc.Encode(resp); err != nil {
-						fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+					if err := sendOK(args); err != nil {
 						return err
 					}
 				}
@@ -866,17 +1024,7 @@ func serve(r io.Reader, w io.Writer) error {
 			szf, _ := req["size"].(float64)
 			sz := int(szf)
 			if sz <= 0 {
-				resp := map[string]interface{}{"ok": false, "error": "invalid alloc size"}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrMissingParam, "invalid alloc size")
 				continue
 			}
 			ptr := C.malloc(C.size_t(sz))
@@ -884,17 +1032,7 @@ func serve(r io.Reader, w io.Writer) error {
 				C.memset(ptr, 0, C.size_t(sz))
 			}
 			if ptr == nil {
-				resp := map[string]interface{}{"ok": false, "error": "malloc failed"}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrMallocFailed, "malloc failed")
 				continue
 			}
 			mid := fmt.Sprintf("m-%d", atomic.AddUint64(&memNext, 1))
@@ -902,32 +1040,14 @@ func serve(r io.Reader, w io.Writer) error {
 			memByID[mid] = ptr
 			memSize[mid] = sz
 			memMu.Unlock()
-			resp := map[string]interface{}{"ok": true, "mem_id": mid, "size": sz}
-			if id != nil {
-				resp["id"] = id
-			}
-			encMu.Lock()
-			if err := enc.Encode(resp); err != nil {
-				encMu.Unlock()
-				fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+			if err := sendOK(map[string]interface{}{"mem_id": mid, "size": sz}); err != nil {
 				return err
 			}
-			encMu.Unlock()
 		case "strdup":
 			// strdup(data) -> allocates C string copy, returns mem_id
 			s, _ := req["data"].(string)
 			if s == "" {
-				resp := map[string]interface{}{"ok": false, "error": "strdup requires non-empty data string"}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrMissingParam, "strdup requires non-empty data string")
 				continue
 			}
 			cs := C.CString(s)
@@ -937,17 +1057,9 @@ func serve(r io.Reader, w io.Writer) error {
 			memByID[mid] = unsafe.Pointer(cs)
 			memSize[mid] = sz
 			memMu.Unlock()
-			resp := map[string]interface{}{"ok": true, "mem_id": mid, "size": sz}
-			if id != nil {
-				resp["id"] = id
-			}
-			encMu.Lock()
-			if err := enc.Encode(resp); err != nil {
-				encMu.Unlock()
-				fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+			if err := sendOK(map[string]interface{}{"mem_id": mid, "size": sz}); err != nil {
 				return err
 			}
-			encMu.Unlock()
 		case "free":
 			mid, _ := req["mem_id"].(string)
 			if mid == "" {
@@ -955,17 +1067,7 @@ func serve(r io.Reader, w io.Writer) error {
 				mid, _ = req["id"].(string)
 			}
 			if mid == "" {
-				resp := map[string]interface{}{"ok": false, "error": "free requires id"}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrMissingParam, "free requires id")
 				continue
 			}
 			memMu.Lock()
@@ -976,51 +1078,27 @@ func serve(r io.Reader, w io.Writer) error {
 				delete(memSize, mid)
 			}
 			memMu.Unlock()
-			resp := map[string]interface{}{"ok": true}
-			if id != nil {
-				resp["id"] = id
+			if !ok {
+				sendErr(ErrInvalidMemID, "invalid mem id")
+				continue
 			}
-			encMu.Lock()
-			if err := enc.Encode(resp); err != nil {
-				encMu.Unlock()
-				fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+			if err := sendOK(nil); err != nil {
 				return err
 			}
-			encMu.Unlock()
 		case "mem_write":
 			mid, _ := req["mem_id"].(string)
-			fmt.Fprintln(os.Stderr, "ffi-helper: mem_write requested mem_id=", mid)
+			log.Debug("mem_write requested mem_id=", mid)
 			data, _ := req["data"].(map[string]interface{})
 			b64, _ := data["__bytes__"].(string)
 			offf, _ := req["offset"].(float64)
 			off := int(offf)
 			if mid == "" || b64 == "" {
-				resp := map[string]interface{}{"ok": false, "error": "mem_write requires id and data"}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrMissingParam, "mem_write requires id and data")
 				continue
 			}
 			raw, err := base64.StdEncoding.DecodeString(b64)
 			if err != nil {
-				resp := map[string]interface{}{"ok": false, "error": "invalid base64"}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrInvalidBase64, "invalid base64")
 				continue
 			}
 			memMu.Lock()
@@ -1028,45 +1106,17 @@ func serve(r io.Reader, w io.Writer) error {
 			sz, _ := memSize[mid]
 			memMu.Unlock()
 			if !has || ptr == nil {
-				resp := map[string]interface{}{"ok": false, "error": "invalid mem id"}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrInvalidMemID, "invalid mem id")
 				continue
 			}
 			if off < 0 || off+len(raw) > sz {
-				resp := map[string]interface{}{"ok": false, "error": "write out of bounds"}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrOutOfBounds, "write out of bounds")
 				continue
 			}
 			C.memcpy(unsafe.Pointer(uintptr(ptr)+uintptr(off)), unsafe.Pointer(&raw[0]), C.size_t(len(raw)))
-			resp := map[string]interface{}{"ok": true}
-			if id != nil {
-				resp["id"] = id
-			}
-			encMu.Lock()
-			if err := enc.Encode(resp); err != nil {
-				encMu.Unlock()
-				fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+			if err := sendOK(nil); err != nil {
 				return err
 			}
-			encMu.Unlock()
 		case "mem_read":
 			mid, _ := req["mem_id"].(string)
 			offf, _ := req["offset"].(float64)
@@ -1078,31 +1128,11 @@ func serve(r io.Reader, w io.Writer) error {
 			sz, _ := memSize[mid]
 			memMu.Unlock()
 			if !has || ptr == nil {
-				resp := map[string]interface{}{"ok": false, "error": "invalid mem id"}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrInvalidMemID, "invalid mem id")
 				continue
 			}
 			if off < 0 || off+ln > sz {
-				resp := map[string]interface{}{"ok": false, "error": "read out of bounds"}
-				if id != nil {
-					resp["id"] = id
-				}
-				encMu.Lock()
-				if err := enc.Encode(resp); err != nil {
-					encMu.Unlock()
-					fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-					return err
-				}
-				encMu.Unlock()
+				sendErr(ErrOutOfBounds, "read out of bounds")
 				continue
 			}
 			buf := C.malloc(C.size_t(ln))
@@ -1110,26 +1140,11 @@ func serve(r io.Reader, w io.Writer) error {
 			b := C.GoBytes(buf, C.int(ln))
 			C.free(buf)
 			encB64 := base64.StdEncoding.EncodeToString(b)
-			resp := map[string]interface{}{"ok": true, "resp": map[string]interface{}{"__bytes__": encB64}}
-			if id != nil {
-				resp["id"] = id
-			}
-			encMu.Lock()
-			if err := enc.Encode(resp); err != nil {
-				encMu.Unlock()
-				fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
+			if err := sendOK(map[string]interface{}{"__bytes__": encB64}); err != nil {
 				return err
 			}
-			encMu.Unlock()
 		default:
-			resp := map[string]interface{}{"ok": false, "error": "unknown command"}
-			if id != nil {
-				resp["id"] = id
-			}
-			if err := enc.Encode(resp); err != nil {
-				fmt.Fprintln(os.Stderr, "ffi-helper: encode error:", err)
-				return err
-			}
+			sendErr(ErrUnknownCmd, "unknown command")
 		}
 	}
 	return sc.Err()
@@ -1146,7 +1161,7 @@ func serveSocket(sockPath string) error {
 		_ = ln.Close()
 		_ = os.Remove(sockPath)
 	}()
-	fmt.Fprintln(os.Stderr, "ffi-helper: socket server listening", sockPath)
+	log.Info("socket server listening", sockPath)
 	conn, err := ln.Accept()
 	if err != nil {
 		return err
@@ -1163,11 +1178,19 @@ func call_cb_from_go(cbid *C.char, carg *C.char) *C.char {
 		arg = C.GoString(carg)
 	}
 	rch := make(chan map[string]interface{}, 1)
-	fmt.Fprintln(os.Stderr, "ffi-helper: call_cb_from_go received cb=", id, "arg=", arg)
+	log.Debug("call_cb_from_go received cb=", id, "arg=", arg)
 	cbReqCh <- cbRequest{cbid: id, args: []interface{}{arg}, resp: rch}
-	fmt.Fprintln(os.Stderr, "ffi-helper: call_cb_from_go queued request for cb=", id)
-	resp := <-rch
-	fmt.Fprintln(os.Stderr, "ffi-helper: call_cb_from_go got response for cb=", id, "resp=", resp)
+	log.Debug("call_cb_from_go queued request for cb=", id)
+
+	var resp map[string]interface{}
+	select {
+	case resp = <-rch:
+		log.Debug("call_cb_from_go got response for cb=", id, "resp=", resp)
+	case <-time.After(5 * time.Second):
+		log.Warn("call_cb_from_go timeout for cb=", id)
+		return nil
+	}
+
 	if ok, _ := resp["ok"].(bool); !ok {
 		return nil
 	}
@@ -1181,17 +1204,28 @@ func call_cb_from_go(cbid *C.char, carg *C.char) *C.char {
 func main() {
 	server := flag.Bool("server", false, "run as server reading JSON lines from stdin and responding")
 	sock := flag.String("socket", "", "path to unix socket to listen on")
+	logLevel := flag.String("log-level", "", "log level: error|warn|info|debug (default: warn, or FFI_LOG_LEVEL env)")
 	flag.Parse()
+
+	// Resolve log level: flag > env > default (warn)
+	lvl := *logLevel
+	if lvl == "" {
+		lvl = os.Getenv("FFI_LOG_LEVEL")
+	}
+	if lvl == "" {
+		lvl = "warn"
+	}
+	log = NewLogger(lvl)
 	if *server {
 		if err := serve(os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "server error:", err)
+			log.Error("server error:", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if *sock != "" {
 		if err := serveSocket(*sock); err != nil {
-			fmt.Fprintln(os.Stderr, "socket server error:", err)
+			log.Error("socket server error:", err)
 			os.Exit(1)
 		}
 		return
