@@ -8,6 +8,9 @@ main.fig
 
 # Binários
 fig
+bin/
+ffi-gen
+ffi-helper
 *.exe
 *.out
 
