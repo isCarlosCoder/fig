@@ -135,6 +135,7 @@ meu-projeto/
 | 10 | [Criacao de Modulos](docs/10-criacao-de-modulos.md) | Como criar e publicar modulos Fig |
 | 11 | [Testes com figtest](docs/11-figtest.md) | Framework de testes integrado |
 | 12 | [Enums](docs/12-enums.md) | Definição e uso de enums |
+| 13 | [FFI — Bibliotecas Nativas](docs/13-ffi.md) | Interface com código C/nativo via FFI |
 
 ### Módulos Embutidos
 
