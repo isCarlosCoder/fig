@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Install/build helper script for Fig, ffi-gen and ffi-helper
+# Usage: ./install [--all]
+# --all will attempt cross builds for linux/darwin/windows (amd64). Note: cgo cross-builds require appropriate cross C toolchain.
+
+SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BIN_DIR="$SCRIPTDIR/bin"
+mkdir -p "$BIN_DIR"
+
+echo "Checking Go..."
+if ! command -v go >/dev/null 2>&1; then
+  echo "ERROR: 'go' not found in PATH. Install Go 1.21+ and try again." >&2
+  exit 1
+fi
+
+GO_VER=$(go version | awk '{print $3}' | sed 's/go//')
+# crude check for minimum version 1.21
+if [[ "$GO_VER" < "1.21" ]]; then
+  echo "Warning: detected Go version $GO_VER. Recommended: Go 1.21+. Proceeding anyway."
+fi
+
+# helper function
+build() {
+  local target=$1
+  local out=$2
+  local pkg=$3
+  echo "building $out ($target) from $pkg..."
+  GOOS=$target go build -o "$BIN_DIR/$out" $pkg
+}
+
+# Build for current platform
+echo "Building for host platform..."
+
+# ffi-gen (pure Go)
+if ! GOOS=$(go env GOOS) build "$(go env GOOS)" ffi-gen ./tools/ffi-gen; then
+  echo "Building ffi-gen failed." >&2
+  exit 1
+fi
+
+# ffi-helper (cgo: requires C compiler)
+if command -v cc >/dev/null 2>&1 || command -v gcc >/dev/null 2>&1 || command -v clang >/dev/null 2>&1; then
+  if ! GOOS=$(go env GOOS) build "$(go env GOOS)" ffi-helper ./tools/ffi-helper; then
+    echo "Building ffi-helper failed." >&2
+    exit 1
+  fi
+else
+  echo "Warning: C compiler not found (gcc/clang). ffi-helper may fail to build or be incomplete." >&2
+  echo "Attempting build anyway..."
+  if ! GOOS=$(go env GOOS) go build -o "$BIN_DIR/ffi-helper" ./tools/ffi-helper; then
+    echo "ffi-helper build failed as expected without a C toolchain." >&2
+  fi
+fi
+
+# fig (main binary)
+echo "Building fig..."
+GOOS=$(go env GOOS) go build -o "$BIN_DIR/fig" .
+
+cat <<EOF
+
+Install complete. Binaries were placed in: $BIN_DIR
+Examples:
+  $BIN_DIR/fig --help
+  $BIN_DIR/ffi-gen -h
+  $BIN_DIR/ffi-helper --help
+
+Note: For cross-compilation or building for other platforms, pass the flag '--all' to attempt builds for linux/darwin/windows (amd64).
+EOF
+
+# Optional cross-build
+if [[ "${1-}" == "--all" ]]; then
+  echo "Attempting cross builds for linux/darwin/windows (amd64). Note: cgo cross-builds require cross toolchains and may fail for ffi-helper."
+  for os in linux darwin windows; do
+    echo "Cross-building for $os/amd64..."
+    env GOOS=$os GOARCH=amd64 go build -o "$BIN_DIR/ffi-gen-$os-amd64" ./tools/ffi-gen || echo "ffi-gen build failed for $os"
+    # ffi-helper may need c toolchain for target - skip if not available
+    echo "Skipping cross-build of ffi-helper unless CC for target is configured"
+    env GOOS=$os GOARCH=amd64 go build -o "$BIN_DIR/fig-$os-amd64" . || echo "fig build failed for $os"
+  done
+  echo "Cross-builds complete (best-effort)."
+fi
+
+exit 0

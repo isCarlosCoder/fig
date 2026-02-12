@@ -16,6 +16,25 @@ go build -o fig .
 
 Isso gera o executável `fig` na pasta do projeto.
 
+### Ferramentas FFI e script de instalação
+
+O repositório inclui utilitários para trabalhar com FFI (`ffi-gen`, `ffi-helper`). Para compilar tudo automaticamente, use o script `install` na raiz:
+
+```bash
+chmod +x ./install
+./install         # Linux / macOS
+```
+
+No Windows, execute o `install.ps1` no PowerShell:
+
+```powershell
+.\\install.ps1
+```
+
+O script compila `fig`, `ffi-gen` e `ffi-helper`. **Observação:** `ffi-helper` depende de um toolchain C (gcc/clang) para compilar corretamente.
+
+Se quiser compilar para múltiplas plataformas localmente, execute `./install --all` (tenta builds para linux/darwin/windows - amd64), embora builds cgo cross-compilados exijam toolchains C específicos e possam falhar.
+
 ### Instalação global (opcional)
 
 Para usar o comando `fig` de qualquer lugar, mova o executável para um diretório no seu `PATH`:

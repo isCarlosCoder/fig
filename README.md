@@ -37,6 +37,39 @@ Opcional — instalar globalmente:
 sudo mv fig /usr/local/bin/
 ```
 
+### Ferramentas adicionais (FFI)
+
+O projeto inclui utilitários usados para trabalhar com FFI: `ffi-gen` (gerador de bindings) e `ffi-helper` (processo helper que carrega bibliotecas C). Para compilar todos os binários de uma vez, use o script de instalação multiplataforma na raiz do projeto:
+
+- Linux / macOS:
+
+```bash
+# Torne o script executável se necessário
+chmod +x ./install
+./install
+```
+
+- Windows (PowerShell):
+
+```powershell
+# Execute no PowerShell com permissões necessárias
+.\\install.ps1
+```
+
+O script tenta compilar `fig`, `ffi-gen` e `ffi-helper` para a plataforma atual. `ffi-helper` exige um toolchain C (gcc/clang) por causa do código C usado internamente; o script avisa se o compilador C não for encontrado.
+
+Para builds manuais:
+
+```bash
+# Build local (binários na pasta bin/)
+go build -o bin/ffi-gen ./tools/ffi-gen
+# Precisa de C toolchain para ffi-helper
+go build -o bin/ffi-helper ./tools/ffi-helper
+go build -o bin/fig .
+```
+
+Para cross-compilar, ajuste `GOOS`/`GOARCH` e garanta toolchain C para a plataforma alvo (cross-compile de código com cgo requer toolchain correspondente).
+
 ## Uso
 
 ```bash
