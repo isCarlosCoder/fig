@@ -61,6 +61,18 @@ func TestStructInitArityError(t *testing.T) {
 	}
 }
 
+func TestStructInitWithDefaultParam(t *testing.T) {
+	src := "struct Point { x; y\nfn init(x, y = 0) { this.x = x; this.y = y } }\nlet p1 = Point(10)\nlet p2 = Point(5, 6)\nprint(p1.y)\nprint(p2.y)"
+	out, err := runFig(t, src)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 2 || lines[0] != "0" || lines[1] != "6" {
+		t.Errorf("expected 0/6, got %q", out)
+	}
+}
+
 func TestStructNoInitArgsError(t *testing.T) {
 	src := "struct Empty { x }\nlet e = Empty(1, 2, 3)"
 	_, err := runFig(t, src)

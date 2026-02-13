@@ -150,6 +150,39 @@ func TestFunctionArityError(t *testing.T) {
 	}
 }
 
+func TestDefaultParameter(t *testing.T) {
+	src := `fn add(a, b = 2) { return a + b; } print(add(3)); print(add(3,4));`
+	out, err := runFig(t, src)
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "5\n7" {
+		t.Fatalf("expected '5\\n7', got %q", out)
+	}
+}
+
+func TestOptionalParameter(t *testing.T) {
+	src := `fn greet(name?) { if (name == null) { print("hi"); } else { print("hi " + name); } } greet(); greet("Joao");`
+	out, err := runFig(t, src)
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "hi\nhi Joao" {
+		t.Fatalf("expected 'hi\\nhi Joao', got %q", out)
+	}
+}
+
+func TestDefaultExpressionReferencesEarlierParam(t *testing.T) {
+	src := `fn f(a, b = a + 1) { print(b); } f(5);`
+	out, err := runFig(t, src)
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "6" {
+		t.Fatalf("expected '6', got %q", out)
+	}
+}
+
 func TestFunctionScopeIsolation(t *testing.T) {
 	src := `let x = 10; fn getX() { return x; } fn shadow() { let x = 99; return x; } print(getX()); print(shadow()); print(x);`
 	out, err := runFig(t, src)
