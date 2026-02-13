@@ -71,7 +71,7 @@ returnStmt
     ;
 
 importStmt
-    : TK_IMPORT STRING ID? SEMICOLON?
+    : TK_IMPORT STRING (ID | STAR)? SEMICOLON?
     ;
 
 useStmt

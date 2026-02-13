@@ -43,6 +43,33 @@ Se nenhum alias for informado, o interpretador derivará um nome de módulo a pa
 - A extensão `.fig` é opcional
 - O import é resolvido em tempo de execução
 - Se um import relativo não for encontrado no diretório do arquivo atual, o interpretador tentará resolver o caminho relativo ao diretório do projeto (quando aplicável), tornando imports como `src/utils.fig` mais tolerantes em diferentes locais do projeto
+- Novo: você pode usar `*` como alias para `import "arquivo.fig" *` — isso "despeja" (inject) os símbolos top-level do arquivo importado no escopo do arquivo que importa (veja seção abaixo)
+
+### Import com `*` — despejar símbolos (apenas import local)
+
+Você pode usar o caractere `*` como alias em `import` para despejar (injetar) todos os símbolos top-level de um arquivo `.fig` importado diretamente no escopo do arquivo que realizou o import.
+
+Exemplo:
+
+```js
+# arquivo: utilidades.fig
+fn coisa() { return "ok" }
+let VALOR = 42
+
+# arquivo: main.fig
+import "utilidades.fig" *
+print(coisa())    # agora acessível diretamente
+print(VALOR)      # 42
+```
+
+Regras e observações importantes:
+
+- O `import "..." *` só funciona para **imports locais de arquivos `.fig`** (não funciona para `use` nem para `import "mod:..."`).
+- O arquivo importado continua sendo executado em seu próprio ambiente, mas suas definições top-level são copiadas (definidas) no escopo do importador.
+- Se um símbolo já existir no escopo do importador, a operação falhará com um erro de tempo de execução (conflito de nomes).
+- Preferir `import "arquivo.fig" alias` quando quiser manter o namespace do módulo e evitar colisões.
+
+---
 
 ### Importando módulos externos
 

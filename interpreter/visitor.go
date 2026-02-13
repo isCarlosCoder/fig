@@ -615,6 +615,20 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 
 	entries, keys := moduleEnv.Snapshot()
 	moduleObj := environment.NewObject(entries, keys)
+	// If alias is a star ("*"), inject module symbols into the current env (only for local file imports).
+	// Otherwise define the module object under the alias name.
+	if ctx.GetToken(parser.FigParserSTAR, 0) != nil || (ctx.ID() != nil && ctx.ID().GetText() == "*") {
+		// Inject each top-level symbol from the module environment into the importer env.
+		entries, _ := moduleEnv.Snapshot()
+		for k, vval := range entries {
+			if err := v.env.Define(k, vval); err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), fmt.Sprintf("cannot import symbol '%s': %v", k, err), len(k))
+				return nil
+			}
+		}
+		return nil
+	}
+
 	// define using localAlias (derived above)
 	if err := v.env.Define(localAlias, moduleObj); err != nil {
 		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(localAlias))
