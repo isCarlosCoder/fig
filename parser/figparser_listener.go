@@ -97,6 +97,18 @@ type FigParserListener interface {
 	// EnterVarAtribuition is called when entering the varAtribuition production.
 	EnterVarAtribuition(c *VarAtribuitionContext)
 
+	// EnterBindingTarget is called when entering the bindingTarget production.
+	EnterBindingTarget(c *BindingTargetContext)
+
+	// EnterArrayPattern is called when entering the arrayPattern production.
+	EnterArrayPattern(c *ArrayPatternContext)
+
+	// EnterBindingElement is called when entering the bindingElement production.
+	EnterBindingElement(c *BindingElementContext)
+
+	// EnterObjectPattern is called when entering the objectPattern production.
+	EnterObjectPattern(c *ObjectPatternContext)
+
 	// EnterMemberAssign is called when entering the memberAssign production.
 	EnterMemberAssign(c *MemberAssignContext)
 
@@ -246,6 +258,18 @@ type FigParserListener interface {
 
 	// ExitVarAtribuition is called when exiting the varAtribuition production.
 	ExitVarAtribuition(c *VarAtribuitionContext)
+
+	// ExitBindingTarget is called when exiting the bindingTarget production.
+	ExitBindingTarget(c *BindingTargetContext)
+
+	// ExitArrayPattern is called when exiting the arrayPattern production.
+	ExitArrayPattern(c *ArrayPatternContext)
+
+	// ExitBindingElement is called when exiting the bindingElement production.
+	ExitBindingElement(c *BindingElementContext)
+
+	// ExitObjectPattern is called when exiting the objectPattern production.
+	ExitObjectPattern(c *ObjectPatternContext)
 
 	// ExitMemberAssign is called when exiting the memberAssign production.
 	ExitMemberAssign(c *MemberAssignContext)

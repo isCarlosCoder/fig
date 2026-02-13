@@ -867,27 +867,136 @@ func (v *FigVisitor) VisitVarDeclaration(ctx *parser.VarDeclarationContext) inte
 	if v.RuntimeErr != nil {
 		return nil
 	}
-	name := ctx.ID().GetText()
+	bt := ctx.BindingTarget()
+	// simple identifier: keep existing behavior
+	if id := bt.ID(); id != nil {
+		name := id.GetText()
+		if ctx.Expr() != nil {
+			val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+			if v.RuntimeErr != nil {
+				return nil
+			}
+			if v.pendingLoopSignal != nil {
+				sig := v.pendingLoopSignal
+				v.pendingLoopSignal = nil
+				return sig
+			}
+			if err := v.env.Define(name, val); err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+				return nil
+			}
+		} else {
+			if err := v.env.Define(name, environment.NewNil()); err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+				return nil
+			}
+		}
+		return nil
+	}
+
+	// destructuring declaration (array or object pattern)
+	var srcVal environment.Value
 	if ctx.Expr() != nil {
-		val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+		srcVal = v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
 		if v.RuntimeErr != nil {
 			return nil
 		}
-		if v.pendingLoopSignal != nil {
-			sig := v.pendingLoopSignal
-			v.pendingLoopSignal = nil
-			return sig
+	} else {
+		srcVal = environment.NewNil()
+	}
+
+	// helper: define a variable in current env (used by destructuring)
+	define := func(name string, val environment.Value) {
+		if name == "_" {
+			// ignore placeholder
+			return
 		}
 		if err := v.env.Define(name, val); err != nil {
 			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
-			return nil
-		}
-	} else {
-		if err := v.env.Define(name, environment.NewNil()); err != nil {
-			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
-			return nil
+			return
 		}
 	}
+
+	// recursive binder for array patterns
+	var bindArray func(ap parser.IArrayPatternContext, src environment.Value)
+	var bindObject func(op parser.IObjectPatternContext, src environment.Value)
+
+	bindArray = func(ap parser.IArrayPatternContext, src environment.Value) {
+		var elems []environment.Value
+		if src.Type == environment.ArrayType {
+			elems = *src.Arr
+		} else if src.Type == environment.NilType {
+			elems = []environment.Value{}
+		} else {
+			v.RuntimeErr = v.makeRuntimeError(ap.GetStart().GetLine(), ap.GetStart().GetColumn(), "cannot destructure non-array value", 1)
+			return
+		}
+		items := ap.AllBindingElement()
+		for i, be := range items {
+			// element could be an identifier or a nested pattern
+			if be.ID() != nil {
+				name := be.ID().GetText()
+				if i < len(elems) {
+					define(name, elems[i])
+				} else {
+					define(name, environment.NewNil())
+				}
+			} else if be.ArrayPattern() != nil {
+				var nestedSrc environment.Value
+				if i < len(elems) {
+					nestedSrc = elems[i]
+				} else {
+					nestedSrc = environment.NewNil()
+				}
+				bindArray(be.ArrayPattern(), nestedSrc)
+			} else if be.ObjectPattern() != nil {
+				var nestedSrc environment.Value
+				if i < len(elems) {
+					nestedSrc = elems[i]
+				} else {
+					nestedSrc = environment.NewNil()
+				}
+				bindObject(be.ObjectPattern(), nestedSrc)
+			}
+			if v.RuntimeErr != nil {
+				return
+			}
+		}
+	}
+
+	bindObject = func(op parser.IObjectPatternContext, src environment.Value) {
+		var entries map[string]environment.Value
+		if src.Type == environment.ObjectType {
+			entries = src.Obj.Entries
+		} else if src.Type == environment.NilType {
+			entries = map[string]environment.Value{}
+		} else {
+			v.RuntimeErr = v.makeRuntimeError(op.GetStart().GetLine(), op.GetStart().GetColumn(), "cannot destructure non-object value", 1)
+			return
+		}
+		for _, id := range op.AllID() {
+			name := id.GetText()
+			if val, ok := entries[name]; ok {
+				define(name, val)
+			} else {
+				define(name, environment.NewNil())
+			}
+			if v.RuntimeErr != nil {
+				return
+			}
+		}
+	}
+
+	if arrPat := bt.ArrayPattern(); arrPat != nil {
+		bindArray(arrPat, srcVal)
+		return nil
+	}
+
+	if objPat := bt.ObjectPattern(); objPat != nil {
+		bindObject(objPat, srcVal)
+		return nil
+	}
+
 	return nil
 }
 
@@ -895,7 +1004,7 @@ func (v *FigVisitor) VisitVarAtribuition(ctx *parser.VarAtribuitionContext) inte
 	if v.RuntimeErr != nil {
 		return nil
 	}
-	name := ctx.ID().GetText()
+	bt := ctx.BindingTarget()
 	val := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
 	if v.RuntimeErr != nil {
 		return nil
@@ -905,8 +1014,149 @@ func (v *FigVisitor) VisitVarAtribuition(ctx *parser.VarAtribuitionContext) inte
 		v.pendingLoopSignal = nil
 		return sig
 	}
-	if err := v.env.Assign(name, val); err != nil {
-		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+
+	assign := func(name string, vval environment.Value) {
+		if name == "_" {
+			return
+		}
+		if err := v.env.Assign(name, vval); err != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+			return
+		}
+	}
+
+	// recursive helpers for assignment-destructuring
+	var bindArrayForAssign func(ap parser.IArrayPatternContext, src environment.Value)
+	var bindObjectForAssign func(op parser.IObjectPatternContext, src environment.Value)
+
+	bindArrayForAssign = func(ap parser.IArrayPatternContext, src environment.Value) {
+		var elems []environment.Value
+		if src.Type == environment.ArrayType {
+			elems = *src.Arr
+		} else if src.Type == environment.NilType {
+			elems = []environment.Value{}
+		} else {
+			v.RuntimeErr = v.makeRuntimeError(ap.GetStart().GetLine(), ap.GetStart().GetColumn(), "cannot destructure non-array value", 1)
+			return
+		}
+		items := ap.AllBindingElement()
+		for i, be := range items {
+			if be.ID() != nil {
+				name := be.ID().GetText()
+				if i < len(elems) {
+					assign(name, elems[i])
+				} else {
+					assign(name, environment.NewNil())
+				}
+			} else if be.ArrayPattern() != nil {
+				var nestedSrc environment.Value
+				if i < len(elems) {
+					nestedSrc = elems[i]
+				} else {
+					nestedSrc = environment.NewNil()
+				}
+				bindArrayForAssign(be.ArrayPattern(), nestedSrc)
+			} else if be.ObjectPattern() != nil {
+				var nestedSrc environment.Value
+				if i < len(elems) {
+					nestedSrc = elems[i]
+				} else {
+					nestedSrc = environment.NewNil()
+				}
+				bindObjectForAssign(be.ObjectPattern(), nestedSrc)
+			}
+			if v.RuntimeErr != nil {
+				return
+			}
+		}
+	}
+
+	bindObjectForAssign = func(op parser.IObjectPatternContext, src environment.Value) {
+		var entries map[string]environment.Value
+		if src.Type == environment.ObjectType {
+			entries = src.Obj.Entries
+		} else if src.Type == environment.NilType {
+			entries = map[string]environment.Value{}
+		} else {
+			v.RuntimeErr = v.makeRuntimeError(op.GetStart().GetLine(), op.GetStart().GetColumn(), "cannot destructure non-object value", 1)
+			return
+		}
+		for _, id := range op.AllID() {
+			name := id.GetText()
+			if val, ok := entries[name]; ok {
+				assign(name, val)
+			} else {
+				assign(name, environment.NewNil())
+			}
+			if v.RuntimeErr != nil {
+				return
+			}
+		}
+	}
+
+	if id := bt.ID(); id != nil {
+		if err := v.env.Assign(id.GetText(), val); err != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
+		}
+		return nil
+	}
+
+	if arrPat := bt.ArrayPattern(); arrPat != nil {
+		if val.Type != environment.ArrayType {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "cannot destructure non-array value", 1)
+			return nil
+		}
+		elems := *val.Arr
+		items := arrPat.AllBindingElement()
+		for i, be := range items {
+			if be.ID() != nil {
+				name := be.ID().GetText()
+				if i < len(elems) {
+					assign(name, elems[i])
+				} else {
+					assign(name, environment.NewNil())
+				}
+			} else if be.ArrayPattern() != nil {
+				var nestedSrc environment.Value
+				if i < len(elems) {
+					nestedSrc = elems[i]
+				} else {
+					nestedSrc = environment.NewNil()
+				}
+				bindArrayForAssign(be.ArrayPattern(), nestedSrc)
+			} else if be.ObjectPattern() != nil {
+				var nestedSrc environment.Value
+				if i < len(elems) {
+					nestedSrc = elems[i]
+				} else {
+					nestedSrc = environment.NewNil()
+				}
+				bindObjectForAssign(be.ObjectPattern(), nestedSrc)
+			}
+			if v.RuntimeErr != nil {
+				return nil
+			}
+		}
+		return nil
+	}
+
+	if objPat := bt.ObjectPattern(); objPat != nil {
+		if val.Type != environment.ObjectType {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "cannot destructure non-object value", 1)
+			return nil
+		}
+		entries := val.Obj.Entries
+		for _, id := range objPat.AllID() {
+			name := id.GetText()
+			if vv, ok := entries[name]; ok {
+				assign(name, vv)
+			} else {
+				assign(name, environment.NewNil())
+			}
+			if v.RuntimeErr != nil {
+				return nil
+			}
+		}
 		return nil
 	}
 	return nil

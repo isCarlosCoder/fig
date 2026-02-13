@@ -127,6 +127,22 @@ func (v *BaseFigParserVisitor) VisitVarAtribuition(ctx *VarAtribuitionContext) i
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseFigParserVisitor) VisitBindingTarget(ctx *BindingTargetContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseFigParserVisitor) VisitArrayPattern(ctx *ArrayPatternContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseFigParserVisitor) VisitBindingElement(ctx *BindingElementContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseFigParserVisitor) VisitObjectPattern(ctx *ObjectPatternContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseFigParserVisitor) VisitMemberAssign(ctx *MemberAssignContext) interface{} {
 	return v.VisitChildren(ctx)
 }

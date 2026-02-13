@@ -97,6 +97,18 @@ type FigParserVisitor interface {
 	// Visit a parse tree produced by FigParser#varAtribuition.
 	VisitVarAtribuition(ctx *VarAtribuitionContext) interface{}
 
+	// Visit a parse tree produced by FigParser#bindingTarget.
+	VisitBindingTarget(ctx *BindingTargetContext) interface{}
+
+	// Visit a parse tree produced by FigParser#arrayPattern.
+	VisitArrayPattern(ctx *ArrayPatternContext) interface{}
+
+	// Visit a parse tree produced by FigParser#bindingElement.
+	VisitBindingElement(ctx *BindingElementContext) interface{}
+
+	// Visit a parse tree produced by FigParser#objectPattern.
+	VisitObjectPattern(ctx *ObjectPatternContext) interface{}
+
 	// Visit a parse tree produced by FigParser#memberAssign.
 	VisitMemberAssign(ctx *MemberAssignContext) interface{}
 

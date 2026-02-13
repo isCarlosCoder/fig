@@ -202,6 +202,30 @@ func (s *BaseFigParserListener) EnterVarAtribuition(ctx *VarAtribuitionContext) 
 // ExitVarAtribuition is called when production varAtribuition is exited.
 func (s *BaseFigParserListener) ExitVarAtribuition(ctx *VarAtribuitionContext) {}
 
+// EnterBindingTarget is called when production bindingTarget is entered.
+func (s *BaseFigParserListener) EnterBindingTarget(ctx *BindingTargetContext) {}
+
+// ExitBindingTarget is called when production bindingTarget is exited.
+func (s *BaseFigParserListener) ExitBindingTarget(ctx *BindingTargetContext) {}
+
+// EnterArrayPattern is called when production arrayPattern is entered.
+func (s *BaseFigParserListener) EnterArrayPattern(ctx *ArrayPatternContext) {}
+
+// ExitArrayPattern is called when production arrayPattern is exited.
+func (s *BaseFigParserListener) ExitArrayPattern(ctx *ArrayPatternContext) {}
+
+// EnterBindingElement is called when production bindingElement is entered.
+func (s *BaseFigParserListener) EnterBindingElement(ctx *BindingElementContext) {}
+
+// ExitBindingElement is called when production bindingElement is exited.
+func (s *BaseFigParserListener) ExitBindingElement(ctx *BindingElementContext) {}
+
+// EnterObjectPattern is called when production objectPattern is entered.
+func (s *BaseFigParserListener) EnterObjectPattern(ctx *ObjectPatternContext) {}
+
+// ExitObjectPattern is called when production objectPattern is exited.
+func (s *BaseFigParserListener) ExitObjectPattern(ctx *ObjectPatternContext) {}
+
 // EnterMemberAssign is called when production memberAssign is entered.
 func (s *BaseFigParserListener) EnterMemberAssign(ctx *MemberAssignContext) {}
 

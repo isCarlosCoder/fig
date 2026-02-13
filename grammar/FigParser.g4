@@ -125,11 +125,32 @@ enumMember
     ;
 
 varDeclaration  
-    : TK_LET ID (ASSIGN expr)? SEMICOLON?
+    : TK_LET bindingTarget (ASSIGN expr)? SEMICOLON?
     ;
 
 varAtribuition
-    : ID ASSIGN expr SEMICOLON?
+    : bindingTarget ASSIGN expr SEMICOLON?
+    ;
+
+// Binding targets for destructuring assignments / declarations
+bindingTarget
+    : ID
+    | arrayPattern
+    | objectPattern
+    ;
+
+arrayPattern
+    : LBRACKET (bindingElement (COMMA bindingElement)*)? RBRACKET
+    ;
+
+bindingElement
+    : ID
+    | arrayPattern
+    | objectPattern
+    ;
+
+objectPattern
+    : LBRACE (ID (COMMA ID)*)? RBRACE
     ;
 
 memberAssign
