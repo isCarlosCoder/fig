@@ -6,6 +6,30 @@ use "arrays"
 
 Operações para manipulação de arrays (listas).
 
+## Desestruturação de arrays
+
+Fig permite desestruturar arrays diretamente em declarações e atribuições usando a sintaxe de colchetes. Você pode ignorar valores com `_` e aninhar patterns.
+
+- `let [a, b] = [10, 20]` — declara `a` e `b` com 10 e 20.
+- `let [_, x] = [9, 8]` — ignora o primeiro elemento.
+- `let [a, [b, c]] = [1, [2, 3]]` — suporta patterns aninhados.
+- `[a, b] = arr` — atribuição por desestruturação (variáveis devem existir).
+- Se um elemento faltar, o nome recebe `null`.
+
+Exemplos:
+
+```js
+let [a, b] = [10, 20]
+print(a)  # 10
+print(b)  # 20
+
+let [_, last] = [1, 2]
+print(last)  # 2
+
+let [a, [b, c]] = [1, [2, 3]]
+print(a, b, c)  # 1 2 3
+```
+
 ## Adicionando elementos
 
 ### arrays.push(arr, valor)

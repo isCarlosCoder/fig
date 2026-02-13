@@ -17,6 +17,44 @@ let resultado
 print(resultado)  # null
 ```
 
+### Desestruturação (destructuring)
+
+Fig suporta desestruturação de `arrays` e `objects` tanto em declarações (`let`) quanto em atribuições. Patterns podem ser aninhados e você pode usar `_` para ignorar um valor.
+
+- `let [a, b] = [10, 20]` — declara `a` e `b` com 10 e 20.
+- `let [_, x] = [9, 8]` — ignora o primeiro elemento; `x` recebe 8.
+- `let {name, age} = { name: "Carlos", age: 23 }` — extrai propriedades do objeto.
+- `let [a, [b, c]] = [1, [2, 3]]` — patterns podem ser aninhados.
+- `[a, b] = arr` — atribuição por desestruturação (variáveis devem existir).
+
+Exemplos:
+
+```js
+let [a, b] = [10, 20]
+print(a)  # 10
+print(b)  # 20
+
+let [_, last] = [1, 2]
+print(last)  # 2
+
+let {name, age} = { name: "C", age: 23 }
+print(name)   # C
+print(age)    # 23
+
+let [a, [b, c]] = [1, [2, 3]]
+print(a, b, c)  # 1 2 3
+```
+
+Comportamento e regras importantes:
+
+- Em `let` (declaração), as variáveis são criadas no escopo atual usando os nomes do pattern.
+- Em atribuição (`[a, b] = arr`) as variáveis já **devem** existir (comportamento igual a `Assign`).
+- `_` no pattern ignora o valor correspondente.
+- Se um elemento estiver faltando no array (por exemplo, `let [x, y] = [1]`), o nome recebe `null`.
+- Se tentar desestruturar um valor que não é `array`/`object`, ocorre um erro de tempo de execução.
+
+---
+
 ## Atribuição
 
 Após declarar, use `=` para alterar o valor:
