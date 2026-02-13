@@ -23,10 +23,18 @@ const (
 	EnumMemberType
 )
 
+// Param describes a single function parameter (name + optional/default metadata).
+type Param struct {
+	Name       string      // identifier
+	HasDefault bool        // true when a default expression was provided (name = expr)
+	Default    interface{} // AST node for the default expression (stored as interface{} to avoid parser import)
+	Optional   bool        // true when declared with `name?` (implicit default `null`)
+}
+
 // FuncDef holds the information needed to call a user-defined function.
 type FuncDef struct {
 	Name       string
-	Params     []string
+	Params     []Param
 	Body       interface{} // *parser.BlockContext — kept as interface{} to avoid import cycle
 	ClosureEnv *Env        // the environment where the function was defined (lexical closure)
 	DefFile    string      // file where function was defined (for stack traces)

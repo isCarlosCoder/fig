@@ -25,6 +25,31 @@ let resultado = soma(3, 5)
 print(resultado)  # 8
 ```
 
+### Parâmetros opcionais e valores padrão ⚙️
+
+- `name = expr` — parâmetro com **valor padrão**; a expressão é avaliada no momento da chamada (call-time).
+- `name?` — parâmetro **opcional** que recebe `null` quando omitido.
+
+Exemplos:
+
+```js
+fn add(a, b = 2) { return a + b }
+print(add(3))      # 5
+print(add(3, 4))   # 7
+
+fn greet(name?) {
+    if (name == null) { print("hi") } else { print("hi " + name) }
+}
+
+greet()            # hi
+greet("Joao")     # hi Joao
+
+fn f(a, b = a + 1) { print(b) }  # default avaliado no momento da chamada
+f(5)                # 6
+```
+
+> Observação: chamadas continuam posicionais — não há suporte a argumentos nomeados nesta etapa.
+
 ## Retorno
 
 Use `return` para retornar um valor. Se não houver `return`, a função retorna `null`:

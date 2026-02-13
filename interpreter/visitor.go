@@ -394,10 +394,21 @@ func (v *FigVisitor) VisitStructDecl(ctx *parser.StructDeclContext) interface{} 
 
 		case *parser.StructMethodContext:
 			methodName := m.ID().GetText()
-			var params []string
+			var params []environment.Param
 			if fp := m.FnParams(); fp != nil {
-				for _, id := range fp.(*parser.FnParamsContext).AllID() {
-					params = append(params, id.GetText())
+				for _, pd := range fp.(*parser.FnParamsContext).AllParamDecl() {
+					switch pctx := pd.(type) {
+					case *parser.ParamWithDefaultOrRequiredContext:
+						param := environment.Param{Name: pctx.ID().GetText()}
+						if pctx.ASSIGN() != nil {
+							param.HasDefault = true
+							param.Default = pctx.Expr()
+						}
+						params = append(params, param)
+					case *parser.ParamOptionalContext:
+						param := environment.Param{Name: pctx.ID().GetText(), Optional: true}
+						params = append(params, param)
+					}
 				}
 			}
 			fd := &environment.FuncDef{
@@ -1391,11 +1402,24 @@ func (v *FigVisitor) VisitPrimary(ctx *parser.PrimaryContext) interface{} {
 	}
 	// ── anonymous function expression: fn(params) block ──
 	if ctx.TK_FN() != nil {
-		var params []string
+		var params []environment.Param
 		if ctx.FnParams() != nil {
 			fp := ctx.FnParams().(*parser.FnParamsContext)
-			for _, p := range fp.AllID() {
-				params = append(params, p.GetText())
+			for _, pd := range fp.AllParamDecl() {
+				switch pctx := pd.(type) {
+				case *parser.ParamWithDefaultOrRequiredContext:
+					name := pctx.ID().GetText()
+					param := environment.Param{Name: name}
+					if pctx.ASSIGN() != nil {
+						param.HasDefault = true
+						param.Default = pctx.Expr()
+					}
+					params = append(params, param)
+				case *parser.ParamOptionalContext:
+					name := pctx.ID().GetText()
+					param := environment.Param{Name: name, Optional: true}
+					params = append(params, param)
+				}
 			}
 		}
 		fd := &environment.FuncDef{
@@ -1685,7 +1709,14 @@ func (v *FigVisitor) instantiateStruct(line, col int, sd *environment.StructDef,
 
 	// Call init if defined
 	if initMethod, ok := sd.Methods["init"]; ok {
-		if len(args) != len(initMethod.Params) {
+		// compute required params for init
+		required := 0
+		for _, p := range initMethod.Params {
+			if !p.HasDefault && !p.Optional {
+				required++
+			}
+		}
+		if len(args) < required || len(args) > len(initMethod.Params) {
 			v.RuntimeErr = v.makeRuntimeError(line, col,
 				fmt.Sprintf("'%s' init expects %d argument(s), got %d", sd.Name, len(initMethod.Params), len(args)), len(sd.Name))
 			return environment.NewNil()
@@ -1719,7 +1750,14 @@ func (v *FigVisitor) callMethod(line, col int, receiver environment.Value, fnVal
 	fd := fnVal.Func
 	name := fd.Name
 
-	if len(args) != len(fd.Params) {
+	// method arity check: missing args allowed if defaults/optionals provided
+	required := 0
+	for _, p := range fd.Params {
+		if !p.HasDefault && !p.Optional {
+			required++
+		}
+	}
+	if len(args) < required || len(args) > len(fd.Params) {
 		v.RuntimeErr = v.makeRuntimeError(line, col,
 			fmt.Sprintf("'%s' expects %d argument(s), got %d", name, len(fd.Params), len(args)), len(name))
 		return environment.NewNil()
@@ -1728,8 +1766,32 @@ func (v *FigVisitor) callMethod(line, col int, receiver environment.Value, fnVal
 	prevEnv := v.env
 	v.env = environment.NewEnv(fd.ClosureEnv)
 	v.env.Define("this", receiver) // bind "this" to the instance
-	for i, param := range fd.Params {
-		v.env.Define(param, args[i])
+	// bind provided args
+	for i, p := range fd.Params {
+		if i < len(args) {
+			v.env.Define(p.Name, args[i])
+		}
+	}
+	// bind defaults/optionals
+	for i, p := range fd.Params {
+		if i >= len(args) {
+			if p.HasDefault {
+				if p.Default != nil {
+					val := v.VisitExpr(p.Default.(*parser.ExprContext)).(environment.Value)
+					if v.RuntimeErr != nil {
+						v.env = prevEnv
+						return environment.NewNil()
+					}
+					v.env.Define(p.Name, val)
+				} else {
+					v.env.Define(p.Name, environment.NewNil())
+				}
+			} else if p.Optional {
+				v.env.Define(p.Name, environment.NewNil())
+			} else {
+				v.env.Define(p.Name, environment.NewNil())
+			}
+		}
 	}
 
 	blockCtx := fd.Body.(*parser.BlockContext)
@@ -1789,8 +1851,14 @@ func (v *FigVisitor) callFunction(line, col int, fnVal environment.Value, args [
 	}
 	fd := fnVal.Func
 
-	// arity check
-	if len(args) != len(fd.Params) {
+	// arity check: allow missing args only when parameters have defaults or are optional
+	required := 0
+	for _, p := range fd.Params {
+		if !p.HasDefault && !p.Optional {
+			required++
+		}
+	}
+	if len(args) < required || len(args) > len(fd.Params) {
 		v.RuntimeErr = v.makeRuntimeError(line, col,
 			fmt.Sprintf("'%s' expects %d argument(s), got %d", name, len(fd.Params), len(args)), len(name))
 		return environment.NewNil()
@@ -1818,8 +1886,34 @@ func (v *FigVisitor) callFunction(line, col int, fnVal environment.Value, args [
 	// create a new scope for the function call (closure over the definition-time env)
 	prevEnv := v.env
 	v.env = environment.NewEnv(fd.ClosureEnv) // functions close over definition-time scope
-	for i, param := range fd.Params {
-		v.env.Define(param, args[i])
+	// bind provided args first
+	for i, p := range fd.Params {
+		if i < len(args) {
+			v.env.Define(p.Name, args[i])
+		}
+	}
+	// evaluate & bind defaults/optionals (left-to-right, call-time evaluation)
+	for i, p := range fd.Params {
+		if i >= len(args) {
+			if p.HasDefault {
+				if p.Default != nil {
+					val := v.VisitExpr(p.Default.(*parser.ExprContext)).(environment.Value)
+					if v.RuntimeErr != nil {
+						v.env = prevEnv
+						return environment.NewNil()
+					}
+					v.env.Define(p.Name, val)
+				} else {
+					// optional parameter declared with '?'
+					v.env.Define(p.Name, environment.NewNil())
+				}
+			} else if p.Optional {
+				v.env.Define(p.Name, environment.NewNil())
+			} else {
+				// missing required param — should not happen because of earlier check
+				v.env.Define(p.Name, environment.NewNil())
+			}
+		}
 	}
 
 	// execute the body
@@ -2264,12 +2358,23 @@ func (v *FigVisitor) VisitFnDecl(ctx *parser.FnDeclContext) interface{} {
 	}
 	name := ctx.ID().GetText()
 
-	// collect parameter names
-	var params []string
+	// collect parameter metadata (name, default, optional)
+	var params []environment.Param
 	if ctx.FnParams() != nil {
 		paramsCtx := ctx.FnParams().(*parser.FnParamsContext)
-		for _, id := range paramsCtx.AllID() {
-			params = append(params, id.GetText())
+		for _, pd := range paramsCtx.AllParamDecl() {
+			switch pctx := pd.(type) {
+			case *parser.ParamWithDefaultOrRequiredContext:
+				param := environment.Param{Name: pctx.ID().GetText()}
+				if pctx.ASSIGN() != nil {
+					param.HasDefault = true
+					param.Default = pctx.Expr()
+				}
+				params = append(params, param)
+			case *parser.ParamOptionalContext:
+				param := environment.Param{Name: pctx.ID().GetText(), Optional: true}
+				params = append(params, param)
+			}
 		}
 	}
 
