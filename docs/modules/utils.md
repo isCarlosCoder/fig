@@ -130,3 +130,47 @@ use "utils";
 print(utils.runeCount("A😀"));  # 2
 print(utils.byteLength("A😀")); # 5
 ```
+
+## zip(...arrays)
+
+Itera múltiplos arrays em paralelo, agrupando os elementos de cada índice em uma tupla (array). A iteração para no menor array (comportamento igual ao `zip` do Python).
+
+- Assinatura: `zip(a1, a2, ...)` — recebe dois ou mais arrays e retorna um `Array` de `Array` (cada elemento é uma tupla com os valores correspondentes por índice).
+- Corta na menor sequência — o tamanho do resultado é igual ao menor comprimento entre os arrays de entrada.
+
+Exemplos:
+
+```js
+use "utils";
+let a = [1,2,3]
+let b = ["x","y","z"]
+print(utils.zip(a, b))      # [[1, "x"], [2, "y"], [3, "z"]]
+
+let a2 = [1,2]
+let b2 = [10,20,30]
+print(utils.zip(a2, b2))    # [[1,10], [2,20]]  (corta no menor array)
+```
+
+Erros:
+- Todos os argumentos devem ser arrays — caso contrário, `zip()` lança um erro.
+
+Resumo (trechos relevantes):
+
+| Função                         | Descrição                                           |
+|-------------------------------:|:---------------------------------------------------|
+| `ord(char)`                    | Retorna o code point Unicode do caractere `char`.   |
+| `chr(code)`                    | Retorna o caractere para o code point `code`.       |
+| `fromCodePoint(code)`          | Alias de `chr(code)`.                               |
+| `codePointAt(s, index)`        | Code point da rune em `index` na string `s`.        |
+| `codePoints(s)`                | Array de code points (runes) de `s`.                |
+| `fromCodePoints(arr)`          | Constrói string a partir de `arr` de code points.   |
+| `toCodePoints(s)`              | Converte `s` em um array de code points.            |
+| `normalize(form, s)`           | Normalização Unicode (`NFC`, `NFD`, `NFKC`, `NFKD`).|
+| `isLetter(s)`                  | True se a primeira rune de `s` for letra.           |
+| `isDigit(s)`                   | True se a primeira rune de `s` for dígito.          |
+| `isWhitespace(s)`              | True se a primeira rune for espaço Unicode.         |
+| `isUpper(s)` / `isLower(s)`    | Teste de caixa (primeira rune).                     |
+| `isAlphaNum(s)`                | True se a primeira rune for letra ou dígito.        |
+| `runeCount(s)`                 | Número de runes (code points) em `s`.               |
+| `byteLength(s)`                | Número de bytes UTF-8 em `s`.                       |
+| `zip(...arrays)`               | Itera arrays em paralelo e agrupa por índice.       |
