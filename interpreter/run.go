@@ -161,3 +161,71 @@ func RunInEnv(source, filename string, env *environment.Env, out io.Writer, errO
 	}
 	return nil
 }
+
+// ErrNotExpression is returned when the provided source is not a single
+// expression statement (useful for REPL detection).
+var ErrNotExpression = fmt.Errorf("not an expression")
+
+// EvalExpression parses `source` and if it contains exactly one top-level
+// expression statement, evaluates that expression using `env` as the global
+// environment and returns its Value. If the source is not a single expression
+// statement, ErrNotExpression is returned. Any parse/runtime errors are
+// returned and printed to `errOut` similarly to Run.
+func EvalExpression(source, filename string, env *environment.Env, out io.Writer, errOut io.Writer) (environment.Value, error) {
+	is := antlr.NewInputStream(source)
+	lex := parser.NewFigLexer(is)
+	ts := antlr.NewCommonTokenStream(lex, antlr.TokenDefaultChannel)
+	p := parser.NewFigParser(ts)
+
+	p.RemoveErrorListeners()
+	listener := NewPrettyErrorListener(source, filename, errOut)
+	listener.AbortOnError = true
+	lex.RemoveErrorListeners()
+	lex.AddErrorListener(listener)
+	p.AddErrorListener(listener)
+
+	var tree antlr.ParseTree
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if _, ok := r.(error); ok && listener != nil && listener.Occurred {
+					return
+				}
+				panic(r)
+			}
+		}()
+		tree = p.Program()
+	}()
+	if listener.Occurred {
+		return environment.NewNil(), listener.Err
+	}
+
+	// Only handle the case where the program is a single ExprStmt
+	if progCtx, ok := tree.(*parser.ProgramContext); ok {
+		if len(progCtx.AllStatements()) == 1 {
+			st := progCtx.AllStatements()[0].(*parser.StatementsContext)
+			if st.ExprStmt() != nil {
+				// Evaluate the single expression using a visitor whose parent
+				// (global) environment is the REPL env so identifiers resolve.
+				v := NewFigVisitorWithSource(env, out, source)
+				// Use the existing local-env behavior (v.env is a fresh local
+				// env with parent == env) so evaluation cannot accidentally
+				// mutate the REPL top-level scope when evaluating pure
+				// expressions.
+				expr := st.ExprStmt().Expr().(*parser.ExprContext)
+				res := v.VisitExpr(expr)
+				if v.RuntimeErr != nil {
+					if re, ok := v.RuntimeErr.(*RuntimeError); ok && errOut != nil {
+						fmt.Fprint(errOut, re.PrettyError())
+					}
+					return environment.NewNil(), v.RuntimeErr
+				}
+				if res == nil {
+					return environment.NewNil(), nil
+				}
+				return res.(environment.Value), nil
+			}
+		}
+	}
+	return environment.NewNil(), ErrNotExpression
+}

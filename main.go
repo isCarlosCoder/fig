@@ -388,7 +388,18 @@ func runRepl(in io.Reader, out io.Writer, errOut io.Writer, preloadedEnv *enviro
 			continue
 		}
 
-		// Try executing the input; print errors to errOut
+		// First try to evaluate as a single expression and echo the result
+		if val, err := interpreter.EvalExpression(src, "<repl>", env, out, errOut); err == nil {
+			// Don't echo `null` (print() already performs output and returns nil)
+			if val.Type != environment.NilType {
+				fmt.Fprintln(out, val.String())
+			}
+			continue
+		} else if err != interpreter.ErrNotExpression {
+			// error evaluating expression (parse/runtime) — already printed
+			continue
+		}
+		// Not a bare expression — execute normally so statements work as before
 		if err := interpreter.Run(src, "<repl>", env, out, errOut); err != nil {
 			// show runtime/parse error (interpreter.Run already prints to errOut)
 			continue

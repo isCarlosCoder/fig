@@ -41,8 +41,8 @@ fn say() { print("hello") }
 		t.Fatalf("start cli: %v (stderr=%s)", err, stderr.String())
 	}
 
-	// send commands to REPL
-	io.WriteString(stdin, "print(answer)\n")
+	// send commands to REPL: bare-expression echo + function call
+	io.WriteString(stdin, "answer\n")
 	io.WriteString(stdin, "say()\n")
 	io.WriteString(stdin, "exit\n")
 	stdin.Close()
