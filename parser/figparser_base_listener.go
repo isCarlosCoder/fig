@@ -328,11 +328,29 @@ func (s *BaseFigParserListener) EnterMatchPattern(ctx *MatchPatternContext) {}
 // ExitMatchPattern is called when production matchPattern is exited.
 func (s *BaseFigParserListener) ExitMatchPattern(ctx *MatchPatternContext) {}
 
-// EnterArrayLiteral is called when production arrayLiteral is entered.
-func (s *BaseFigParserListener) EnterArrayLiteral(ctx *ArrayLiteralContext) {}
+// EnterArrayLiteralSimple is called when production arrayLiteralSimple is entered.
+func (s *BaseFigParserListener) EnterArrayLiteralSimple(ctx *ArrayLiteralSimpleContext) {}
 
-// ExitArrayLiteral is called when production arrayLiteral is exited.
-func (s *BaseFigParserListener) ExitArrayLiteral(ctx *ArrayLiteralContext) {}
+// ExitArrayLiteralSimple is called when production arrayLiteralSimple is exited.
+func (s *BaseFigParserListener) ExitArrayLiteralSimple(ctx *ArrayLiteralSimpleContext) {}
+
+// EnterArrayCompForIn is called when production arrayCompForIn is entered.
+func (s *BaseFigParserListener) EnterArrayCompForIn(ctx *ArrayCompForInContext) {}
+
+// ExitArrayCompForIn is called when production arrayCompForIn is exited.
+func (s *BaseFigParserListener) ExitArrayCompForIn(ctx *ArrayCompForInContext) {}
+
+// EnterArrayCompForRange is called when production arrayCompForRange is entered.
+func (s *BaseFigParserListener) EnterArrayCompForRange(ctx *ArrayCompForRangeContext) {}
+
+// ExitArrayCompForRange is called when production arrayCompForRange is exited.
+func (s *BaseFigParserListener) ExitArrayCompForRange(ctx *ArrayCompForRangeContext) {}
+
+// EnterArrayCompForEnumerate is called when production arrayCompForEnumerate is entered.
+func (s *BaseFigParserListener) EnterArrayCompForEnumerate(ctx *ArrayCompForEnumerateContext) {}
+
+// ExitArrayCompForEnumerate is called when production arrayCompForEnumerate is exited.
+func (s *BaseFigParserListener) ExitArrayCompForEnumerate(ctx *ArrayCompForEnumerateContext) {}
 
 // EnterObjectLiteral is called when production objectLiteral is entered.
 func (s *BaseFigParserListener) EnterObjectLiteral(ctx *ObjectLiteralContext) {}

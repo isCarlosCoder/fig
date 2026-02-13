@@ -1637,7 +1637,7 @@ func (v *FigVisitor) VisitPrimary(ctx *parser.PrimaryContext) interface{} {
 		return thisVal
 	}
 	if ctx.ArrayLiteral() != nil {
-		return v.VisitArrayLiteral(ctx.ArrayLiteral().(*parser.ArrayLiteralContext))
+		return v.VisitArrayLiteral(ctx.ArrayLiteral())
 	}
 	if ctx.ObjectLiteral() != nil {
 		return v.VisitObjectLiteral(ctx.ObjectLiteral().(*parser.ObjectLiteralContext))
@@ -2394,17 +2394,247 @@ func (v *FigVisitor) dotAccess(line, col int, container environment.Value, key s
 	}
 }
 
-// VisitArrayLiteral evaluates [expr, expr, ...]
-func (v *FigVisitor) VisitArrayLiteral(ctx *parser.ArrayLiteralContext) interface{} {
-	var elems []environment.Value
-	for _, e := range ctx.AllExpr() {
-		val := v.VisitExpr(e.(*parser.ExprContext)).(environment.Value)
+// VisitArrayLiteral evaluates array literals and comprehensions
+// Examples supported:
+//
+//	[1, 2, 3]
+//	[x(i) for i in arr]
+//	[x(i) for i in range(0, 10)]
+//	[x(i,j) for i, j in enumerate(arr)]
+func (v *FigVisitor) VisitArrayLiteral(ctx parser.IArrayLiteralContext) interface{} {
+	// detect comprehension by presence of `for` token
+	hasFor := false
+	for _, ch := range ctx.GetChildren() {
+		if tn, ok := ch.(antlr.TerminalNode); ok && tn.GetSymbol().GetTokenType() == parser.FigParserTK_FOR {
+			hasFor = true
+			break
+		}
+	}
+	if !hasFor {
+		var elems []environment.Value
+		// collect expression child nodes (works with current generated parser subcontexts)
+		for _, ch := range ctx.GetChildren() {
+			if ectx, ok := ch.(parser.IExprContext); ok {
+				val := v.VisitExpr(ectx.(*parser.ExprContext)).(environment.Value)
+				if v.RuntimeErr != nil {
+					return environment.NewNil()
+				}
+				elems = append(elems, val)
+			}
+		}
+		return environment.NewArray(elems)
+	}
+
+	// comprehension — element expression is the first expr in the context
+	var exprs []parser.IExprContext
+	for _, ch := range ctx.GetChildren() {
+		if ectx, ok := ch.(parser.IExprContext); ok {
+			exprs = append(exprs, ectx)
+		}
+	}
+	if len(exprs) == 0 {
+		return environment.NewArray(nil)
+	}
+	elemExpr := exprs[0].(*parser.ExprContext)
+
+	// helper to evaluate the element expression inside a per-iteration env
+	evalElem := func() environment.Value {
+		res := v.VisitExpr(elemExpr).(environment.Value)
 		if v.RuntimeErr != nil {
 			return environment.NewNil()
 		}
-		elems = append(elems, val)
+		return res
 	}
-	return environment.NewArray(elems)
+
+	// Prepare result array
+	result := make([]environment.Value, 0)
+
+	// Determine comprehension variant by tokens present
+	var hasEnumerate, hasRange bool
+	for _, ch := range ctx.GetChildren() {
+		if tn, ok := ch.(antlr.TerminalNode); ok {
+			tt := tn.GetSymbol().GetTokenType()
+			if tt == parser.FigParserTK_ENUMERATE {
+				hasEnumerate = true
+				break
+			}
+		}
+	}
+	if hasEnumerate {
+		// enumerate variant: [elem for idx, val in enumerate(expr)]
+		// extract two identifier names (the IDs after `for`)
+		var ids []string
+		for _, ch := range ctx.GetChildren() {
+			switch t := ch.(type) {
+			case antlr.TerminalNode:
+				if t.GetSymbol().GetTokenType() == parser.FigParserID {
+					ids = append(ids, t.GetText())
+					if len(ids) == 2 {
+						break
+					}
+				}
+			}
+		}
+		if len(ids) < 2 {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "invalid enumerate comprehension", 3)
+			return environment.NewNil()
+		}
+		idxName := ids[0]
+		valName := ids[1]
+
+		// iterable expression is the second expr in exprs
+		iterVal := v.VisitExpr(exprs[1].(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		if iterVal.Type != environment.ArrayType {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "enumerate() argument must be an array", 1)
+			return environment.NewNil()
+		}
+		arr := *iterVal.Arr
+
+		for i, el := range arr {
+			v.pushEnv()
+			if err := v.env.Define(idxName, environment.NewNumber(float64(i))); err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(idxName))
+				v.popEnv()
+				return environment.NewNil()
+			}
+			if err := v.env.Define(valName, el); err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(valName))
+				v.popEnv()
+				return environment.NewNil()
+			}
+			val := evalElem()
+			v.popEnv()
+			if v.RuntimeErr != nil {
+				return environment.NewNil()
+			}
+			result = append(result, val)
+		}
+		return environment.NewArray(result)
+	}
+
+	for _, ch := range ctx.GetChildren() {
+		if tn, ok := ch.(antlr.TerminalNode); ok && tn.GetSymbol().GetTokenType() == parser.FigParserTK_RANGE {
+			hasRange = true
+			break
+		}
+	}
+	if hasRange {
+		// range variant: [elem for i in range(start, end[, step])]
+		// loop variable name is the first ID after `for`
+		var varName string
+		for _, ch := range ctx.GetChildren() {
+			switch t := ch.(type) {
+			case antlr.TerminalNode:
+				if t.GetSymbol().GetTokenType() == parser.FigParserID {
+					varName = t.GetText()
+					break
+				}
+			}
+			if varName != "" {
+				break
+			}
+		}
+		// range args are the subsequent exprs in exprs (indices 1..)
+		if len(exprs) < 3 {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() requires start and end", 1)
+			return environment.NewNil()
+		}
+		startVal := v.VisitExpr(exprs[1].(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		endVal := v.VisitExpr(exprs[2].(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		if startVal.Type != environment.NumberType || endVal.Type != environment.NumberType {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() arguments must be numbers", 5)
+			return environment.NewNil()
+		}
+		start := startVal.Num
+		end := endVal.Num
+		step := 1.0
+		if len(exprs) == 4 {
+			stepVal := v.VisitExpr(exprs[3].(*parser.ExprContext)).(environment.Value)
+			if v.RuntimeErr != nil {
+				return environment.NewNil()
+			}
+			if stepVal.Type != environment.NumberType {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() step must be a number", 5)
+				return environment.NewNil()
+			}
+			step = stepVal.Num
+			if step == 0 {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() step cannot be zero", 5)
+				return environment.NewNil()
+			}
+		} else if start > end {
+			step = -1.0
+		}
+
+		for i := start; (step > 0 && i < end) || (step < 0 && i > end); i += step {
+			v.pushEnv()
+			if err := v.env.Define(varName, environment.NewNumber(i)); err != nil {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(varName))
+				v.popEnv()
+				return environment.NewNil()
+			}
+			val := evalElem()
+			v.popEnv()
+			if v.RuntimeErr != nil {
+				return environment.NewNil()
+			}
+			result = append(result, val)
+		}
+		return environment.NewArray(result)
+	}
+
+	// default: for-in variant [elem for id in expr]
+	// loop var is first ID after `for`
+	varName := ""
+	for _, ch := range ctx.GetChildren() {
+		switch t := ch.(type) {
+		case antlr.TerminalNode:
+			if t.GetSymbol().GetTokenType() == parser.FigParserID {
+				// the first ID we encounter after the element expression is the loop var
+				if varName == "" {
+					varName = t.GetText()
+					break
+				}
+			}
+		}
+		if varName != "" {
+			break
+		}
+	}
+
+	iterVal := v.VisitExpr(exprs[1].(*parser.ExprContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+	if iterVal.Type != environment.ArrayType {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "for..in requires an array", 3)
+		return environment.NewNil()
+	}
+	arr := *iterVal.Arr
+	for _, el := range arr {
+		v.pushEnv()
+		if err := v.env.Define(varName, el); err != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(varName))
+			v.popEnv()
+			return environment.NewNil()
+		}
+		val := evalElem()
+		v.popEnv()
+		if v.RuntimeErr != nil {
+			return environment.NewNil()
+		}
+		result = append(result, val)
+	}
+	return environment.NewArray(result)
 }
 
 // VisitObjectLiteral evaluates {key: value, ...}

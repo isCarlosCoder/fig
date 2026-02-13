@@ -30,6 +30,36 @@ let [a, [b, c]] = [1, [2, 3]]
 print(a, b, c)  # 1 2 3
 ```
 
+## Comprehensions (geradores de lista)
+
+Você pode construir arrays rapidamente usando uma expressão `for` dentro de colchetes — comportamento semelhante ao `list comprehension` do Python, usando a sintaxe de Fig:
+
+- `let x = [expr for id in collection]` — itera `collection` e avalia `expr` por elemento.
+- Suporta variantes `range(start, end[, step])` e `enumerate(collection)` usadas no `for`.
+
+Exemplos:
+
+```js
+let arr = [1, 2, 3]
+let doubles = [v * 2 for v in arr]
+print(doubles)  # [2, 4, 6]
+
+let nums = [i for i in range(0, 5)]
+print(nums)  # [0, 1, 2, 3, 4]
+
+let letters = [i for i, v in enumerate(["a","b"])]
+print(letters)  # [0, 1]
+
+# chamar função dentro da expressão
+let squares = [n * n for n in range(0, 4)]
+print(squares)  # [0, 1, 4, 9]
+```
+
+Observações:
+- A expressão do lado esquerdo (`expr`) é avaliada em um escopo por-iteração onde a(s) variável(is) do `for` estão definidas.
+- Erros e semântica do `for` (range/enumerate/iteráveis) seguem as mesmas regras das instruções `for` normais.
+
+## Adicionando elementos
 ## Adicionando elementos
 
 ### arrays.push(arr, valor)

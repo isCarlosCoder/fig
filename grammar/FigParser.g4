@@ -204,7 +204,10 @@ matchPattern
     ;
 
 arrayLiteral
-    : LBRACKET (expr (COMMA expr)*)? RBRACKET
+    : LBRACKET (expr (COMMA expr)*)? RBRACKET                                 # arrayLiteralSimple
+    | LBRACKET expr TK_FOR ID TK_IN expr RBRACKET                            # arrayCompForIn
+    | LBRACKET expr TK_FOR ID TK_IN TK_RANGE LPAREN expr COMMA expr (COMMA expr)? RPAREN RBRACKET  # arrayCompForRange
+    | LBRACKET expr TK_FOR ID COMMA ID TK_IN TK_ENUMERATE LPAREN expr RPAREN RBRACKET  # arrayCompForEnumerate
     ;
 
 objectLiteral

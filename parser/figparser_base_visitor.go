@@ -211,7 +211,19 @@ func (v *BaseFigParserVisitor) VisitMatchPattern(ctx *MatchPatternContext) inter
 	return v.VisitChildren(ctx)
 }
 
-func (v *BaseFigParserVisitor) VisitArrayLiteral(ctx *ArrayLiteralContext) interface{} {
+func (v *BaseFigParserVisitor) VisitArrayLiteralSimple(ctx *ArrayLiteralSimpleContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseFigParserVisitor) VisitArrayCompForIn(ctx *ArrayCompForInContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseFigParserVisitor) VisitArrayCompForRange(ctx *ArrayCompForRangeContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseFigParserVisitor) VisitArrayCompForEnumerate(ctx *ArrayCompForEnumerateContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 

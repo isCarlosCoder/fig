@@ -160,8 +160,17 @@ type FigParserVisitor interface {
 	// Visit a parse tree produced by FigParser#matchPattern.
 	VisitMatchPattern(ctx *MatchPatternContext) interface{}
 
-	// Visit a parse tree produced by FigParser#arrayLiteral.
-	VisitArrayLiteral(ctx *ArrayLiteralContext) interface{}
+	// Visit a parse tree produced by FigParser#arrayLiteralSimple.
+	VisitArrayLiteralSimple(ctx *ArrayLiteralSimpleContext) interface{}
+
+	// Visit a parse tree produced by FigParser#arrayCompForIn.
+	VisitArrayCompForIn(ctx *ArrayCompForInContext) interface{}
+
+	// Visit a parse tree produced by FigParser#arrayCompForRange.
+	VisitArrayCompForRange(ctx *ArrayCompForRangeContext) interface{}
+
+	// Visit a parse tree produced by FigParser#arrayCompForEnumerate.
+	VisitArrayCompForEnumerate(ctx *ArrayCompForEnumerateContext) interface{}
 
 	// Visit a parse tree produced by FigParser#objectLiteral.
 	VisitObjectLiteral(ctx *ObjectLiteralContext) interface{}

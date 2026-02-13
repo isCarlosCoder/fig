@@ -160,8 +160,17 @@ type FigParserListener interface {
 	// EnterMatchPattern is called when entering the matchPattern production.
 	EnterMatchPattern(c *MatchPatternContext)
 
-	// EnterArrayLiteral is called when entering the arrayLiteral production.
-	EnterArrayLiteral(c *ArrayLiteralContext)
+	// EnterArrayLiteralSimple is called when entering the arrayLiteralSimple production.
+	EnterArrayLiteralSimple(c *ArrayLiteralSimpleContext)
+
+	// EnterArrayCompForIn is called when entering the arrayCompForIn production.
+	EnterArrayCompForIn(c *ArrayCompForInContext)
+
+	// EnterArrayCompForRange is called when entering the arrayCompForRange production.
+	EnterArrayCompForRange(c *ArrayCompForRangeContext)
+
+	// EnterArrayCompForEnumerate is called when entering the arrayCompForEnumerate production.
+	EnterArrayCompForEnumerate(c *ArrayCompForEnumerateContext)
 
 	// EnterObjectLiteral is called when entering the objectLiteral production.
 	EnterObjectLiteral(c *ObjectLiteralContext)
@@ -322,8 +331,17 @@ type FigParserListener interface {
 	// ExitMatchPattern is called when exiting the matchPattern production.
 	ExitMatchPattern(c *MatchPatternContext)
 
-	// ExitArrayLiteral is called when exiting the arrayLiteral production.
-	ExitArrayLiteral(c *ArrayLiteralContext)
+	// ExitArrayLiteralSimple is called when exiting the arrayLiteralSimple production.
+	ExitArrayLiteralSimple(c *ArrayLiteralSimpleContext)
+
+	// ExitArrayCompForIn is called when exiting the arrayCompForIn production.
+	ExitArrayCompForIn(c *ArrayCompForInContext)
+
+	// ExitArrayCompForRange is called when exiting the arrayCompForRange production.
+	ExitArrayCompForRange(c *ArrayCompForRangeContext)
+
+	// ExitArrayCompForEnumerate is called when exiting the arrayCompForEnumerate production.
+	ExitArrayCompForEnumerate(c *ArrayCompForEnumerateContext)
 
 	// ExitObjectLiteral is called when exiting the objectLiteral production.
 	ExitObjectLiteral(c *ObjectLiteralContext)
