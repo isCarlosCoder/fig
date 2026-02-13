@@ -186,6 +186,37 @@ func TestImportLocalAliasWithSubdirFromInside(t *testing.T) {
 	}
 }
 
+func TestImportWithDotSlashFromInside(t *testing.T) {
+	out, err := runFigFile(t, "src/main_inside_rel.fig")
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "9" {
+		t.Fatalf("expected '9', got %q", out)
+	}
+}
+
+func TestImportWithParentDirFromDeep(t *testing.T) {
+	out, err := runFigFile(t, "src/subdir/deep_import.fig")
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "3" {
+		t.Fatalf("expected '3', got %q", out)
+	}
+}
+
+func TestImportPlainNameResolvesRelativeToFile(t *testing.T) {
+	// create a temporary file in src that imports "utils.fig" without path
+	out, err := runFigFile(t, "src/main_inside.fig")
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "9" {
+		t.Fatalf("expected '9', got %q", out)
+	}
+}
+
 func TestImportUsesmath(t *testing.T) {
 	src := `import "uses_math"
 print(uses_math.quadrado(5));`

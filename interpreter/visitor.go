@@ -472,21 +472,42 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 		modPath = modPath + ".fig"
 	}
 
-	// Resolve relative to the current file's directory
-	resolved := modPath
-	if !filepath.IsAbs(modPath) {
-		resolved = filepath.Join(v.baseDir, modPath)
-	}
-	resolved = filepath.Clean(resolved)
+	// Build a list of candidate paths (in priority order) and pick the first that exists.
+	var candidates []string
+	// Absolute path: use directly
+	if filepath.IsAbs(modPath) {
+		candidates = append(candidates, modPath)
+	} else if strings.HasPrefix(modPath, "./") || strings.HasPrefix(modPath, "../") {
+		// Explicit relative paths are always relative to the importing file's directory
+		candidates = append(candidates, filepath.Join(v.baseDir, modPath))
+	} else {
+		// 1) relative to the directory of the importing file
+		candidates = append(candidates, filepath.Join(v.baseDir, modPath))
 
-	// If the resolved path does not exist, and we have a project root, try resolving
-	// the path relative to the project root (handles cases like importing "src/x.fig"
-	// from within files that are already inside "src/").
-	if _, statErr := os.Stat(resolved); os.IsNotExist(statErr) && v.projectRoot != "" {
-		alt := filepath.Join(v.projectRoot, modPath)
-		if _, altErr := os.Stat(alt); altErr == nil {
-			resolved = alt
+		// 2) if projectRoot is known, try projectRoot/src/<modPath> for plain names
+		if v.projectRoot != "" {
+			if !strings.Contains(modPath, string(os.PathSeparator)) {
+				candidates = append(candidates, filepath.Join(v.projectRoot, "src", modPath))
+			}
+			// 3) try projectRoot/<modPath>
+			candidates = append(candidates, filepath.Join(v.projectRoot, modPath))
 		}
+	}
+
+	// Clean candidates and pick first that exists
+	var resolved string
+	for _, c := range candidates {
+		c = filepath.Clean(c)
+		if _, statErr := os.Stat(c); statErr == nil {
+			resolved = c
+			break
+		}
+	}
+
+	// If none of the candidates exist, still set resolved to the first candidate so
+	// the error message references a sensible path.
+	if resolved == "" && len(candidates) > 0 {
+		resolved = filepath.Clean(candidates[0])
 	}
 
 	// Absolute path for dedup
