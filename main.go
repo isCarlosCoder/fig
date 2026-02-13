@@ -400,8 +400,9 @@ func runRepl(in io.Reader, out io.Writer, errOut io.Writer, preloadedEnv *enviro
 			continue
 		}
 		// Not a bare expression — execute normally so statements work as before
-		if err := interpreter.Run(src, "<repl>", env, out, errOut); err != nil {
-			// show runtime/parse error (interpreter.Run already prints to errOut)
+		// Use RunInEnv so top-level declarations persist in the REPL environment.
+		if err := interpreter.RunInEnv(src, "<repl>", env, out, errOut); err != nil {
+			// show runtime/parse error (interpreter.RunInEnv already prints to errOut)
 			continue
 		}
 	}
