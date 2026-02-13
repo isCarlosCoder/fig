@@ -2091,6 +2091,10 @@ func (v *FigVisitor) indexAccess(line, col int, container, index environment.Val
 		}
 		idx := int(n)
 		arr := *container.Arr
+		// Support negative indices (Python-like): -1 refers to last element.
+		if idx < 0 {
+			idx = len(arr) + idx
+		}
 		if idx < 0 || idx >= len(arr) {
 			v.RuntimeErr = v.makeRuntimeError(line, col, fmt.Sprintf("array index %d out of range (length %d)", idx, len(arr)), 1)
 			return environment.NewNil()

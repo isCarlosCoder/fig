@@ -182,9 +182,19 @@ func TestArrayIndexOutOfRange(t *testing.T) {
 }
 
 func TestArrayNegativeIndex(t *testing.T) {
-	_, err := runFig(t, `let arr = [1, 2, 3]; let y = arr[-1]`)
+	out, err := runFig(t, `let arr = [1, 2, 3]; print(arr[-1]); print(arr[-3])`)
+	if err != nil {
+		t.Fatalf("unexpected runtime error: %v", err)
+	}
+	expected := "3\n1"
+	if out != expected {
+		t.Fatalf("expected %q, got %q", expected, out)
+	}
+
+	// out-of-range negative index should still error
+	_, err = runFig(t, `let arr = [1,2,3]; let y = arr[-4]`)
 	if err == nil {
-		t.Fatal("expected runtime error for negative index")
+		t.Fatal("expected runtime error for out-of-range negative index")
 	}
 	if !strings.Contains(err.Error(), "out of range") {
 		t.Fatalf("expected 'out of range' in error, got: %v", err)

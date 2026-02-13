@@ -94,6 +94,17 @@ print(arrays.index(nums, 20))   # 1
 print(arrays.index(nums, 99))   # -1
 ```
 
+### Indexação direta com índices negativos
+
+Arrays suportam indexação direta com inteiros negativos (comportamento estilo Python):
+`arr[-1]` retorna o último elemento, `arr[-2]` o penúltimo, e assim por diante. Índices fora do intervalo continuam gerando erro.
+
+```js
+let a = ["x", "y", "z"]
+print(a[-1])   # z
+print(a[-3])   # x
+```
+
 ### arrays.contains(arr, valor)
 
 Retorna `true` se o array contém o valor:
