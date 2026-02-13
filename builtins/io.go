@@ -114,6 +114,109 @@ func init() {
 			return environment.NewBool(!os.IsNotExist(err)), nil
 		}),
 
+		// isDir(path) — returns true if path exists and is a directory
+		fn("isDir", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("isDir() expects 1 argument, got %d", len(args))
+			}
+			if args[0].Type != environment.StringType {
+				return environment.NewNil(), fmt.Errorf("isDir() path must be a string")
+			}
+			path := args[0].Str
+			st, err := os.Stat(path)
+			if err != nil {
+				if os.IsNotExist(err) {
+					return environment.NewBool(false), nil
+				}
+				return environment.NewNil(), fmt.Errorf("isDir(): %v", err)
+			}
+			return environment.NewBool(st.IsDir()), nil
+		}),
+
+		// mkdir(path) — create a directory (error if exists)
+		fn("mkdir", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("mkdir() expects 1 argument, got %d", len(args))
+			}
+			if args[0].Type != environment.StringType {
+				return environment.NewNil(), fmt.Errorf("mkdir() path must be a string")
+			}
+			path := args[0].Str
+			err := os.Mkdir(path, 0755)
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("mkdir(): %v", err)
+			}
+			return environment.NewNil(), nil
+		}),
+
+		// mkdirAll(path) — create directory and parents (like mkdir -p)
+		fn("mkdirAll", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("mkdirAll() expects 1 argument, got %d", len(args))
+			}
+			if args[0].Type != environment.StringType {
+				return environment.NewNil(), fmt.Errorf("mkdirAll() path must be a string")
+			}
+			path := args[0].Str
+			err := os.MkdirAll(path, 0755)
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("mkdirAll(): %v", err)
+			}
+			return environment.NewNil(), nil
+		}),
+
+		// readDir(path) — returns array of entries (names) in a directory
+		fn("readDir", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("readDir() expects 1 argument, got %d", len(args))
+			}
+			if args[0].Type != environment.StringType {
+				return environment.NewNil(), fmt.Errorf("readDir() path must be a string")
+			}
+			path := args[0].Str
+			entries, err := os.ReadDir(path)
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("readDir(): %v", err)
+			}
+			arr := make([]environment.Value, 0, len(entries))
+			for _, e := range entries {
+				arr = append(arr, environment.NewString(e.Name()))
+			}
+			return environment.NewArray(arr), nil
+		}),
+
+		// rmdir(path) — remove empty directory
+		fn("rmdir", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("rmdir() expects 1 argument, got %d", len(args))
+			}
+			if args[0].Type != environment.StringType {
+				return environment.NewNil(), fmt.Errorf("rmdir() path must be a string")
+			}
+			path := args[0].Str
+			err := os.Remove(path)
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("rmdir(): %v", err)
+			}
+			return environment.NewNil(), nil
+		}),
+
+		// rmdirAll(path) — remove directory and its contents recursively
+		fn("rmdirAll", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("rmdirAll() expects 1 argument, got %d", len(args))
+			}
+			if args[0].Type != environment.StringType {
+				return environment.NewNil(), fmt.Errorf("rmdirAll() path must be a string")
+			}
+			path := args[0].Str
+			err := os.RemoveAll(path)
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("rmdirAll(): %v", err)
+			}
+			return environment.NewNil(), nil
+		}),
+
 		// deleteFile(path) — deletes a file
 		fn("deleteFile", func(args []environment.Value) (environment.Value, error) {
 			if len(args) != 1 {
