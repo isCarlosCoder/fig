@@ -26,6 +26,7 @@ func printHelp(out io.Writer) {
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Usage:")
 	fmt.Fprintln(out, "  fig <file>          Run a .fig source file")
+	fmt.Fprintln(out, "  fig -i <files...>   Load one or more .fig files into the REPL session and open REPL")
 	fmt.Fprintln(out, "  fig run [file]      Run a .fig source file or project main")
 	fmt.Fprintln(out, "  fig test [pattern]  Run test files (tests/*.fig, *_test.fig)")
 	fmt.Fprintln(out, "  fig init <dir>      Create a new Fig project")
@@ -40,8 +41,47 @@ func printHelp(out io.Writer) {
 
 func main() {
 	args := os.Args[1:]
+	// -i <files...> : preload files into REPL env then open REPL
+	if len(args) > 0 && args[0] == "-i" {
+		files := args[1:]
+		if len(files) == 0 {
+			fmt.Fprintln(os.Stderr, "-i requires at least one .fig file path")
+			os.Exit(1)
+		}
+		env := environment.NewEnv(nil)
+		// set ScriptCwd/Args for preload runs (consistent with runFile)
+		prevArgs := builtins.ScriptArgs
+		prevCwd := builtins.ScriptCwd
+		builtins.ScriptArgs = []string{}
+		cwd, _ := os.Getwd()
+		builtins.ScriptCwd = cwd
+		defer func() {
+			builtins.ScriptArgs = prevArgs
+			builtins.ScriptCwd = prevCwd
+		}()
+
+		for _, f := range files {
+			abs, err := filepath.Abs(f)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "cannot resolve %s: %v\n", f, err)
+				continue
+			}
+			data, err := os.ReadFile(abs)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "cannot read %s: %v\n", f, err)
+				continue
+			}
+			if err := interpreter.RunInEnv(string(data), abs, env, os.Stdout, os.Stderr); err != nil {
+				fmt.Fprintf(os.Stderr, "error loading %s: %v\n", f, err)
+			}
+		}
+
+		runRepl(os.Stdin, os.Stdout, os.Stderr, env)
+		return
+	}
+
 	if len(args) == 0 {
-		runRepl(os.Stdin, os.Stdout, os.Stderr)
+		runRepl(os.Stdin, os.Stdout, os.Stderr, nil)
 		return
 	}
 
@@ -294,9 +334,14 @@ func isFigFile(path string) bool {
 // - input: reads lines from `in` and prints results / errors to `out`/`errOut`.
 // - supports a minimal multiline mode when parentheses/braces/brackets are unbalanced.
 // - special commands: `.exit` or `exit` to quit.
-func runRepl(in io.Reader, out io.Writer, errOut io.Writer) {
+func runRepl(in io.Reader, out io.Writer, errOut io.Writer, preloadedEnv *environment.Env) {
 	reader := bufio.NewReader(in)
-	env := environment.NewEnv(nil)
+	var env *environment.Env
+	if preloadedEnv != nil {
+		env = preloadedEnv
+	} else {
+		env = environment.NewEnv(nil)
+	}
 	// set script context for REPL
 	prevArgs := builtins.ScriptArgs
 	prevCwd := builtins.ScriptCwd
