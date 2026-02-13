@@ -21,6 +21,7 @@ STAR: '*' ;
 SLASH: '/' ;
 LPAREN: '(' ;
 RPAREN: ')' ;
+QUESTION: '?' ;
 EXCLAM: '!' ;
 SEMICOLON: ';' ;
 MOD: '%' ;

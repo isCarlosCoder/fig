@@ -58,7 +58,12 @@ fnDecl
     ;
 
 fnParams
-    : ID (COMMA ID)*
+    : paramDecl (COMMA paramDecl)*
+    ;
+
+paramDecl
+    : ID (ASSIGN expr)?        # paramWithDefaultOrRequired
+    | ID QUESTION              # paramOptional
     ;
 
 returnStmt

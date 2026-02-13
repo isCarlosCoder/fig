@@ -80,6 +80,20 @@ func (s *BaseFigParserListener) EnterFnParams(ctx *FnParamsContext) {}
 // ExitFnParams is called when production fnParams is exited.
 func (s *BaseFigParserListener) ExitFnParams(ctx *FnParamsContext) {}
 
+// EnterParamWithDefaultOrRequired is called when production paramWithDefaultOrRequired is entered.
+func (s *BaseFigParserListener) EnterParamWithDefaultOrRequired(ctx *ParamWithDefaultOrRequiredContext) {
+}
+
+// ExitParamWithDefaultOrRequired is called when production paramWithDefaultOrRequired is exited.
+func (s *BaseFigParserListener) ExitParamWithDefaultOrRequired(ctx *ParamWithDefaultOrRequiredContext) {
+}
+
+// EnterParamOptional is called when production paramOptional is entered.
+func (s *BaseFigParserListener) EnterParamOptional(ctx *ParamOptionalContext) {}
+
+// ExitParamOptional is called when production paramOptional is exited.
+func (s *BaseFigParserListener) ExitParamOptional(ctx *ParamOptionalContext) {}
+
 // EnterReturnStmt is called when production returnStmt is entered.
 func (s *BaseFigParserListener) EnterReturnStmt(ctx *ReturnStmtContext) {}
 

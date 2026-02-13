@@ -47,6 +47,14 @@ func (v *BaseFigParserVisitor) VisitFnParams(ctx *FnParamsContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseFigParserVisitor) VisitParamWithDefaultOrRequired(ctx *ParamWithDefaultOrRequiredContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseFigParserVisitor) VisitParamOptional(ctx *ParamOptionalContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseFigParserVisitor) VisitReturnStmt(ctx *ReturnStmtContext) interface{} {
 	return v.VisitChildren(ctx)
 }

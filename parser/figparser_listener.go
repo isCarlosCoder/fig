@@ -37,6 +37,12 @@ type FigParserListener interface {
 	// EnterFnParams is called when entering the fnParams production.
 	EnterFnParams(c *FnParamsContext)
 
+	// EnterParamWithDefaultOrRequired is called when entering the paramWithDefaultOrRequired production.
+	EnterParamWithDefaultOrRequired(c *ParamWithDefaultOrRequiredContext)
+
+	// EnterParamOptional is called when entering the paramOptional production.
+	EnterParamOptional(c *ParamOptionalContext)
+
 	// EnterReturnStmt is called when entering the returnStmt production.
 	EnterReturnStmt(c *ReturnStmtContext)
 
@@ -180,6 +186,12 @@ type FigParserListener interface {
 
 	// ExitFnParams is called when exiting the fnParams production.
 	ExitFnParams(c *FnParamsContext)
+
+	// ExitParamWithDefaultOrRequired is called when exiting the paramWithDefaultOrRequired production.
+	ExitParamWithDefaultOrRequired(c *ParamWithDefaultOrRequiredContext)
+
+	// ExitParamOptional is called when exiting the paramOptional production.
+	ExitParamOptional(c *ParamOptionalContext)
 
 	// ExitReturnStmt is called when exiting the returnStmt production.
 	ExitReturnStmt(c *ReturnStmtContext)
