@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -40,8 +41,8 @@ func printHelp(out io.Writer) {
 func main() {
 	args := os.Args[1:]
 	if len(args) == 0 {
-		printHelp(os.Stdout)
-		os.Exit(0)
+		runRepl(os.Stdin, os.Stdout, os.Stderr)
+		return
 	}
 
 	// handle global flags
@@ -287,6 +288,95 @@ func loadModuleToml(path string) (moduleTomlConfig, error) {
 
 func isFigFile(path string) bool {
 	return filepath.Ext(path) == ".fig"
+}
+
+// runRepl starts a simple Read-Eval-Print loop using a persistent global environment.
+// - input: reads lines from `in` and prints results / errors to `out`/`errOut`.
+// - supports a minimal multiline mode when parentheses/braces/brackets are unbalanced.
+// - special commands: `.exit` or `exit` to quit.
+func runRepl(in io.Reader, out io.Writer, errOut io.Writer) {
+	reader := bufio.NewReader(in)
+	env := environment.NewEnv(nil)
+	// set script context for REPL
+	prevArgs := builtins.ScriptArgs
+	prevCwd := builtins.ScriptCwd
+	builtins.ScriptArgs = []string{}
+	cwd, _ := os.Getwd()
+	builtins.ScriptCwd = cwd
+	defer func() {
+		builtins.ScriptArgs = prevArgs
+		builtins.ScriptCwd = prevCwd
+	}()
+
+	fmt.Fprintln(out, "Fig REPL — type 'exit' or '.exit' to quit")
+	for {
+		// read lines until balanced or EOF
+		var lines []string
+		prompt := "fig> "
+		for {
+			fmt.Fprint(out, prompt)
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				// EOF — exit quietly
+				fmt.Fprintln(out, "")
+				return
+			}
+			line = strings.TrimRight(line, "\r\n")
+			if line == "" && len(lines) == 0 {
+				// empty input — continue
+				break
+			}
+			if line == ".exit" || line == "exit" {
+				return
+			}
+			lines = append(lines, line)
+			// check simple balance for delimiters; if balanced, stop reading more
+			if delimitersBalanced(strings.Join(lines, "\n")) {
+				break
+			}
+			// continue with a continuation prompt
+			prompt = "  > "
+		}
+
+		src := strings.Join(lines, "\n")
+		if strings.TrimSpace(src) == "" {
+			continue
+		}
+
+		// Try executing the input; print errors to errOut
+		if err := interpreter.Run(src, "<repl>", env, out, errOut); err != nil {
+			// show runtime/parse error (interpreter.Run already prints to errOut)
+			continue
+		}
+	}
+}
+
+// delimitersBalanced performs a naive check for balanced (), {}, []
+// It ignores strings/comments — sufficient for basic interactive usage.
+func delimitersBalanced(s string) bool {
+	p := 0
+	b := 0
+	q := 0
+	for _, r := range s {
+		switch r {
+		case '(':
+			p++
+		case ')':
+			p--
+		case '{':
+			b++
+		case '}':
+			b--
+		case '[':
+			q++
+		case ']':
+			q--
+		}
+		if p < 0 || b < 0 || q < 0 {
+			return false
+		}
+	}
+	return p == 0 && b == 0 && q == 0
 }
 
 func initProject(target string, out io.Writer, errOut io.Writer) error {
