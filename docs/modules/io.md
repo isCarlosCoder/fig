@@ -96,6 +96,63 @@ io.deleteFile("temporario.txt")
 
 Se o arquivo não existir, gera um erro.
 
+## Diretórios (novas funções)
+
+As funções a seguir operam de forma multiplataforma usando as rotinas padrão do Go — elas funcionam tanto em Linux/macOS quanto em Windows.
+
+### io.isDir(caminho)
+
+Retorna `true` se o caminho existe e for um diretório; `false` se não existir ou for um arquivo.
+
+```js
+if (io.isDir("/tmp")) {
+    print("/tmp é um diretório")
+}
+```
+
+### io.mkdir(caminho)
+
+Cria um diretório único; falha se o diretório já existir.
+
+```js
+io.mkdir("logs")
+```
+
+### io.mkdirAll(caminho)
+
+Cria um diretório e todos os pais necessários (comportamento "mkdir -p").
+
+```js
+io.mkdirAll("tmp/data/2026")
+```
+
+### io.readDir(caminho)
+
+Retorna um `array` com os nomes (strings) das entradas no diretório. Ordem não garantida.
+
+```js
+let itens = io.readDir("./src")
+print(itens[0])
+```
+
+### io.rmdir(caminho)
+
+Remove um diretório **vazio**; falha se não for vazio.
+
+```js
+io.rmdir("olddir")
+```
+
+### io.rmdirAll(caminho)
+
+Remove um diretório e todo o seu conteúdo recursivamente (cuidado — operação destrutiva).
+
+```js
+io.rmdirAll("tmp/build")
+```
+
+> Observação: `io.rmdirAll` é equivalente a `rm -rf` — use com cuidado.
+
 ## Exemplo completo
 
 ```js
@@ -122,11 +179,17 @@ if (io.exists("lista.txt")) {
 ## Referência rápida
 
 | Função                       | Descrição                               |
-|-----------------------------|------------------------------------------|
+|------------------------------|------------------------------------------|
 | `io.input(prompt?)`          | Ler entrada do teclado (com prompt)      |
 | `io.readLine()`              | Ler linha da entrada padrão              |
 | `io.readFile(path)`          | Ler conteúdo de um arquivo               |
 | `io.writeFile(path, data)`   | Escrever/sobrescrever arquivo            |
 | `io.appendFile(path, data)`  | Adicionar ao final do arquivo            |
 | `io.exists(path)`            | Verificar se arquivo/diretório existe    |
+| `io.isDir(path)`             | Verificar se o caminho é um diretório    |
+| `io.mkdir(path)`             | Criar diretório (falha se existir)       |
+| `io.mkdirAll(path)`          | Criar diretório recursivamente (mkdir -p)|
+| `io.readDir(path)`           | Listar entradas de um diretório         |
+| `io.rmdir(path)`             | Remover diretório vazio                  |
+| `io.rmdirAll(path)`          | Remover diretório recursivamente (rm -rf)|
 | `io.deleteFile(path)`        | Remover arquivo                          |
