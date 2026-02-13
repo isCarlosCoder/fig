@@ -291,5 +291,35 @@ func init() {
 			}
 			return environment.NewNumber(float64(len(s))), nil
 		}),
+
+		// zip(...arrays) -> iterate in parallel, stop at shortest array, return array of tuples
+		fn("zip", func(args []environment.Value) (environment.Value, error) {
+			if len(args) == 0 {
+				return environment.NewNil(), fmt.Errorf("zip() expects at least one array argument")
+			}
+			// validate and find minimum length
+			minLen := -1
+			arrays := make([][]environment.Value, len(args))
+			for i, a := range args {
+				if a.Type != environment.ArrayType || a.Arr == nil {
+					return environment.NewNil(), fmt.Errorf("zip() argument %d must be an array", i+1)
+				}
+				arr := *a.Arr
+				arrays[i] = arr
+				if minLen == -1 || len(arr) < minLen {
+					minLen = len(arr)
+				}
+			}
+			// build result: for j in 0..minLen-1 create tuple array
+			out := make([]environment.Value, 0, minLen)
+			for j := 0; j < minLen; j++ {
+				row := make([]environment.Value, len(arrays))
+				for k := range arrays {
+					row[k] = arrays[k][j]
+				}
+				out = append(out, environment.NewArray(row))
+			}
+			return environment.NewArray(out), nil
+		}),
 	))
 }
