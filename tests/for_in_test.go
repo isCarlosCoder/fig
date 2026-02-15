@@ -24,6 +24,23 @@ print(r)
 	}
 }
 
+func TestForRangeSingleArg(t *testing.T) {
+	src := `
+let r = ""
+for i in range(5) {
+  r = r + i
+}
+print(r)
+`
+	out, err := runFig(t, src)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.TrimSpace(out) != "01234" {
+		t.Errorf("expected '01234' for single-arg range, got %q", out)
+	}
+}
+
 func TestForRangeStep(t *testing.T) {
 	src := `
 let r = ""
@@ -133,6 +150,14 @@ func TestForRangeStepZeroError(t *testing.T) {
 	_, err := runFig(t, src)
 	if err == nil {
 		t.Fatal("expected error for step=0")
+	}
+}
+
+func TestForRangeNonIntegerError(t *testing.T) {
+	src := `for i in range(2.5) { print(i) }`
+	_, err := runFig(t, src)
+	if err == nil {
+		t.Fatal("expected error for non-integer range argument")
 	}
 }
 

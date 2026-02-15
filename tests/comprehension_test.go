@@ -24,6 +24,17 @@ func TestArrayComprehensionRange(t *testing.T) {
 	}
 }
 
+func TestArrayComprehensionRangeSingleArg(t *testing.T) {
+	src := `let res = [i for i in range(5)]; print(res);`
+	out, err := runFigSource(t, src)
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "[0, 1, 2, 3, 4]" {
+		t.Fatalf("expected '[0, 1, 2, 3, 4]' for single-arg range, got %q", out)
+	}
+}
+
 func TestArrayComprehensionEnumerate(t *testing.T) {
 	src := `let arr = ["a","b"]; let pairs = [idx for idx, v in enumerate(arr)]; print(pairs);`
 	out, err := runFigSource(t, src)

@@ -142,9 +142,10 @@ for item in [1, 2, 3] {
 
 ## range
 
-Gera uma sequência de números para iterar:
+Gera uma sequência de números para iterar. Suporta a forma de um argumento `range(fim)` (equivalente a `range(0, fim)`) além da forma clássica `range(início, fim[, passo])`:
 
 ```
+range(fim)
 range(início, fim)
 range(início, fim, passo)
 ```
@@ -152,7 +153,13 @@ range(início, fim, passo)
 O valor `fim` **não é incluído** (exclusivo).
 
 ```js
-# De 0 até 4
+# De 0 até 4 (forma de 1 argumento)
+for i in range(5) {
+    print(i)
+}
+# Saída: 0, 1, 2, 3, 4
+
+# De 0 até 4 (forma clássica)
 for i in range(0, 5) {
     print(i)
 }

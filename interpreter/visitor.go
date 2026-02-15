@@ -2552,41 +2552,67 @@ func (v *FigVisitor) VisitArrayLiteral(ctx parser.IArrayLiteralContext) interfac
 			}
 		}
 		// range args are the subsequent exprs in exprs (indices 1..)
-		if len(exprs) < 3 {
-			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() requires start and end", 1)
+		// support single-argument form: range(stop)  -> start=0, step=1 (Python-like)
+		if len(exprs) < 2 {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() requires at least 1 argument", 1)
 			return environment.NewNil()
 		}
-		startVal := v.VisitExpr(exprs[1].(*parser.ExprContext)).(environment.Value)
-		if v.RuntimeErr != nil {
-			return environment.NewNil()
-		}
-		endVal := v.VisitExpr(exprs[2].(*parser.ExprContext)).(environment.Value)
-		if v.RuntimeErr != nil {
-			return environment.NewNil()
-		}
-		if startVal.Type != environment.NumberType || endVal.Type != environment.NumberType {
-			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() arguments must be numbers", 5)
-			return environment.NewNil()
-		}
-		start := startVal.Num
-		end := endVal.Num
-		step := 1.0
-		if len(exprs) == 4 {
-			stepVal := v.VisitExpr(exprs[3].(*parser.ExprContext)).(environment.Value)
+
+		var start, end, step float64
+		// single-arg: range(stop)
+		if len(exprs) == 2 {
+			stopVal := v.VisitExpr(exprs[1].(*parser.ExprContext)).(environment.Value)
 			if v.RuntimeErr != nil {
 				return environment.NewNil()
 			}
-			if stepVal.Type != environment.NumberType {
-				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() step must be a number", 5)
+			if stopVal.Type != environment.NumberType {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() argument must be a number", 5)
 				return environment.NewNil()
 			}
-			step = stepVal.Num
-			if step == 0 {
-				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() step cannot be zero", 5)
+			start = 0
+			end = stopVal.Num
+			step = 1.0
+		} else {
+			// two- or three-arg form: range(start, end[, step])
+			startVal := v.VisitExpr(exprs[1].(*parser.ExprContext)).(environment.Value)
+			if v.RuntimeErr != nil {
 				return environment.NewNil()
 			}
-		} else if start > end {
-			step = -1.0
+			endVal := v.VisitExpr(exprs[2].(*parser.ExprContext)).(environment.Value)
+			if v.RuntimeErr != nil {
+				return environment.NewNil()
+			}
+			if startVal.Type != environment.NumberType || endVal.Type != environment.NumberType {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() arguments must be numbers", 5)
+				return environment.NewNil()
+			}
+			start = startVal.Num
+			end = endVal.Num
+			step = 1.0
+			if len(exprs) == 4 {
+				stepVal := v.VisitExpr(exprs[3].(*parser.ExprContext)).(environment.Value)
+				if v.RuntimeErr != nil {
+					return environment.NewNil()
+				}
+				if stepVal.Type != environment.NumberType {
+					v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() step must be a number", 5)
+					return environment.NewNil()
+				}
+				step = stepVal.Num
+				if step == 0 {
+					v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() step cannot be zero", 5)
+					return environment.NewNil()
+				}
+			} else if start > end {
+				// legacy behavior: auto-decrement when start > end and no explicit step
+				step = -1.0
+			}
+		}
+
+		// enforce integer-only semantics for range arguments
+		if start != math.Trunc(start) || end != math.Trunc(end) || step != math.Trunc(step) {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "range() arguments must be integers", 5)
+			return environment.NewNil()
 		}
 
 		for i := start; (step > 0 && i < end) || (step < 0 && i > end); i += step {
@@ -3085,43 +3111,68 @@ func (v *FigVisitor) VisitForRange(ctx *parser.ForRangeContext) interface{} {
 	varName := ctx.ID().GetText()
 	exprs := ctx.AllExpr()
 
-	startVal := v.VisitExpr(exprs[0].(*parser.ExprContext)).(environment.Value)
-	if v.RuntimeErr != nil {
-		return nil
-	}
-	endVal := v.VisitExpr(exprs[1].(*parser.ExprContext)).(environment.Value)
-	if v.RuntimeErr != nil {
-		return nil
-	}
-
-	if startVal.Type != environment.NumberType || endVal.Type != environment.NumberType {
-		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
-			"range() arguments must be numbers", 5)
-		return nil
-	}
-
-	start := startVal.Num
-	end := endVal.Num
-	step := 1.0
-
-	if len(exprs) == 3 {
-		stepVal := v.VisitExpr(exprs[2].(*parser.ExprContext)).(environment.Value)
+	var start, end, step float64
+	// support single-argument form: range(stop)
+	if len(exprs) == 1 {
+		stopVal := v.VisitExpr(exprs[0].(*parser.ExprContext)).(environment.Value)
 		if v.RuntimeErr != nil {
 			return nil
 		}
-		if stepVal.Type != environment.NumberType {
+		if stopVal.Type != environment.NumberType {
 			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
-				"range() step must be a number", 5)
+				"range() argument must be a number", 5)
 			return nil
 		}
-		step = stepVal.Num
-		if step == 0 {
-			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
-				"range() step cannot be zero", 5)
+		start = 0
+		end = stopVal.Num
+		step = 1.0
+	} else {
+		// existing two- or three-arg form
+		startVal := v.VisitExpr(exprs[0].(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
 			return nil
 		}
-	} else if start > end {
-		step = -1.0
+		endVal := v.VisitExpr(exprs[1].(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return nil
+		}
+
+		if startVal.Type != environment.NumberType || endVal.Type != environment.NumberType {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+				"range() arguments must be numbers", 5)
+			return nil
+		}
+
+		start = startVal.Num
+		end = endVal.Num
+		step = 1.0
+
+		if len(exprs) == 3 {
+			stepVal := v.VisitExpr(exprs[2].(*parser.ExprContext)).(environment.Value)
+			if v.RuntimeErr != nil {
+				return nil
+			}
+			if stepVal.Type != environment.NumberType {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+					"range() step must be a number", 5)
+				return nil
+			}
+			step = stepVal.Num
+			if step == 0 {
+				v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+					"range() step cannot be zero", 5)
+				return nil
+			}
+		} else if start > end {
+			step = -1.0
+		}
+	}
+
+	// enforce integer-only semantics for range arguments
+	if start != math.Trunc(start) || end != math.Trunc(end) || step != math.Trunc(step) {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
+			"range() arguments must be integers", 5)
+		return nil
 	}
 
 	v.loopDepth++

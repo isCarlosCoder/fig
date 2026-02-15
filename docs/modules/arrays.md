@@ -35,7 +35,7 @@ print(a, b, c)  # 1 2 3
 Você pode construir arrays rapidamente usando uma expressão `for` dentro de colchetes — comportamento semelhante ao `list comprehension` do Python, usando a sintaxe de Fig:
 
 - `let x = [expr for id in collection]` — itera `collection` e avalia `expr` por elemento.
-- Suporta variantes `range(start, end[, step])` e `enumerate(collection)` usadas no `for`.
+- Suporta variantes `range(stop)` (forma de 1 argumento), `range(start, end[, step])` e `enumerate(collection)` usadas no `for`.
 
 Exemplos:
 
@@ -44,8 +44,11 @@ let arr = [1, 2, 3]
 let doubles = [v * 2 for v in arr]
 print(doubles)  # [2, 4, 6]
 
-let nums = [i for i in range(0, 5)]
+let nums = [i for i in range(5)]  # forma de 1 argumento (equivalente a range(0, 5))
 print(nums)  # [0, 1, 2, 3, 4]
+
+let nums2 = [i for i in range(0, 5)]  # forma clássica
+print(nums2)  # [0, 1, 2, 3, 4]
 
 let letters = [i for i, v in enumerate(["a","b"])]
 print(letters)  # [0, 1]
