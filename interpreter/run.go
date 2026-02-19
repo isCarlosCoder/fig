@@ -29,6 +29,7 @@ func Run(source, filename string, global *environment.Env, out io.Writer, errOut
 		}
 	}()
 
+	source = preprocessAttributes(source)
 	is := antlr.NewInputStream(source)
 	lex := parser.NewFigLexer(is)
 	ts := antlr.NewCommonTokenStream(lex, antlr.TokenDefaultChannel)
@@ -99,6 +100,7 @@ func RunInEnv(source, filename string, env *environment.Env, out io.Writer, errO
 		}
 	}()
 
+	source = preprocessAttributes(source)
 	is := antlr.NewInputStream(source)
 	lex := parser.NewFigLexer(is)
 	ts := antlr.NewCommonTokenStream(lex, antlr.TokenDefaultChannel)
@@ -172,6 +174,7 @@ var ErrNotExpression = fmt.Errorf("not an expression")
 // statement, ErrNotExpression is returned. Any parse/runtime errors are
 // returned and printed to `errOut` similarly to Run.
 func EvalExpression(source, filename string, env *environment.Env, out io.Writer, errOut io.Writer) (environment.Value, error) {
+	source = preprocessAttributes(source)
 	is := antlr.NewInputStream(source)
 	lex := parser.NewFigLexer(is)
 	ts := antlr.NewCommonTokenStream(lex, antlr.TokenDefaultChannel)

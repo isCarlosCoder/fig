@@ -169,6 +169,7 @@ meu-projeto/
 | 11 | [Testes com figtest](docs/11-figtest.md) | Framework de testes integrado |
 | 12 | [Enums](docs/12-enums.md) | Definição e uso de enums |
 | 13 | [FFI — Bibliotecas Nativas](docs/13-ffi.md) | Interface com código C/nativo via FFI |
+| 14 | [Funções nativas (@native)](docs/14-native.md) | Marcar funções para execução via fast‑path nativa (validação/compilação) |
 | — | [FFI — Referência Detalhada](docs/ffi/index.md) | Protocolo, tipos, erros, memória, sandbox, exemplos |
 
 ### Módulos Embutidos

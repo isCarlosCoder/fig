@@ -2155,6 +2155,16 @@ func (v *FigVisitor) callFunction(line, col int, fnVal environment.Value, args [
 		return environment.NewNil()
 	}
 
+	// fast-path: native compiled function implementation (no env push)
+	if fd.IsNative && fd.NativeImpl != nil {
+		res, err := fd.NativeImpl(args)
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, err.Error(), len(name))
+			return environment.NewNil()
+		}
+		return res
+	}
+
 	// push a stack frame for this function call (show where it was defined)
 	v.pushFrame("function", name, fd.DefFile, fd.DefLine, 0)
 	defer v.popFrame()
@@ -2937,6 +2947,40 @@ func (v *FigVisitor) VisitFnDecl(ctx *parser.FnDeclContext) interface{} {
 		DefFile:    v.currentFile,
 		DefLine:    ctx.GetStart().GetLine(),
 	}
+
+	// detect attribute metadata injected by preprocessAttributes: a top-level
+	// var named __native_meta_<fnname> set to an optional comma-separated
+	// key=value list (or empty). If present, attempt to compile a native
+	// implementation for the function; compilation errors fail definition.
+	metaVar := "__native_meta_" + name
+	if mv, ok := v.env.Get(metaVar); ok && mv.Type == environment.StringType {
+		opts := map[string]string{}
+		raw := strings.TrimSpace(mv.Str)
+		if raw != "" {
+			for _, part := range strings.Split(raw, ",") {
+				part = strings.TrimSpace(part)
+				if part == "" {
+					continue
+				}
+				if strings.Contains(part, "=") {
+					kv := strings.SplitN(part, "=", 2)
+					opts[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+				} else {
+					opts[part] = "true"
+				}
+			}
+		}
+
+		// attempt native compilation; on error reject the definition
+		if err := compileNativeFunc(fd); err != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(name))
+			return nil
+		}
+		fd.NativeOpts = opts
+		// clear metadata var to avoid polluting the env
+		v.env.Set(metaVar, environment.NewNil())
+	}
+
 	if err := v.env.Define(name, environment.NewFunction(fd)); err != nil {
 		// allow redefinition of functions (overwrite)
 		v.env.Set(name, environment.NewFunction(fd))

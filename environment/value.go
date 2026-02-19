@@ -39,6 +39,13 @@ type FuncDef struct {
 	ClosureEnv *Env        // the environment where the function was defined (lexical closure)
 	DefFile    string      // file where function was defined (for stack traces)
 	DefLine    int         // line where function was defined (for stack traces)
+
+	// Native function fast-path (set when function is annotated with @native and
+	// successfully compiled to the numeric fast-path). NativeImpl, when non-nil,
+	// is invoked directly by the call path and should return an environment.Value.
+	IsNative   bool
+	NativeOpts map[string]string
+	NativeImpl func(args []Value) (Value, error)
 }
 
 // BuiltinFn is the signature for native Go functions callable from Fig.

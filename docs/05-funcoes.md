@@ -91,6 +91,32 @@ let dobro = fn(x) {
 print(dobro(5))  # 10
 ```
 
+## Funções nativas (@native)
+
+Use `@native` para marcar funções simples que devem ser executadas pelo "backend" da linguagem (fast‑path numérica). A forma curta `@native` e a forma com parênteses `@native()` são aceitas; a versão com colchetes `@[native()]` também é permitida.
+
+Regras iniciais:
+
+- Apenas expressões numéricas simples são suportadas (literais, parâmetros, `+ - * / %`, `-x`, parênteses)
+- Chamadas a `math.<fn>` estão permitidas (ex.: `math.exp`)
+- Sem variáveis locais, loops, closures ou arrays no corpo
+- Corpo deve ser uma única instrução `return <expr>`
+- Se a anotação não puder ser compilada, a definição falha (erro em tempo de definição)
+
+Exemplo:
+
+```js
+@native fn sigmoid(x) {
+    return 1 / (1 + math.exp(-x))
+}
+
+print(sigmoid(0))  # 0.5
+```
+
+Use `@native()` com argumentos no futuro (ex.: `@native(fallback=true)`) — argumentos são aceitos e armazenados como metadados.
+
+> Para documentação completa e exemplos avançados veja: [Funções nativas — @native](docs/14-native.md)
+
 Funções anônimas podem ser passadas como argumento:
 
 ```js
