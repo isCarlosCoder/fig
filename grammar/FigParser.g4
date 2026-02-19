@@ -129,7 +129,7 @@ varDeclaration
     ;
 
 varAtribuition
-    : bindingTarget ASSIGN expr SEMICOLON?
+    : bindingTarget (ASSIGN | PLUSEQ | MINUSEQ | STAREQ | SLASHEQ | MODEQ) expr SEMICOLON?
     ;
 
 // Binding targets for destructuring assignments / declarations
@@ -154,7 +154,7 @@ objectPattern
     ;
 
 memberAssign
-    : expr (LBRACKET expr RBRACKET | DOT memberName)+ ASSIGN expr SEMICOLON?
+    : expr (LBRACKET expr RBRACKET | DOT memberName)+ (ASSIGN | PLUSEQ | MINUSEQ | STAREQ | SLASHEQ | MODEQ) expr SEMICOLON?
     ;
 
 printStmt

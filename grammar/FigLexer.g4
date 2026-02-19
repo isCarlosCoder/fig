@@ -10,6 +10,12 @@ NEQ: '!=' ;
 AND: '&&' ;
 OR: '||' ;
 
+PLUSEQ: '+=' ;
+MINUSEQ: '-=' ;
+STAREQ: '*=' ;
+SLASHEQ: '/=' ;
+MODEQ: '%=' ;
+
 // Single-char tokens
 DOT: '.' ;
 ASSIGN: '=' ;

@@ -1014,6 +1014,86 @@ func (v *FigVisitor) VisitVarDeclaration(ctx *parser.VarDeclarationContext) inte
 	return nil
 }
 
+func (v *FigVisitor) applyBinaryOp(op int, left, right environment.Value, line, col int) environment.Value {
+	// reuse same semantics as VisitTerm/VisitFactor for binary ops
+	switch op {
+	case parser.FigParserPLUS, parser.FigParserPLUSEQ:
+		if left.Type == environment.StringType || right.Type == environment.StringType {
+			return environment.NewString(left.String() + right.String())
+		}
+		ln, err := left.AsNumber()
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, err.Error(), 1)
+			return environment.NewNil()
+		}
+		rn, err := right.AsNumber()
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, err.Error(), 1)
+			return environment.NewNil()
+		}
+		return environment.NewNumber(ln + rn)
+	case parser.FigParserMINUS, parser.FigParserMINUSEQ:
+		ln, err := left.AsNumber()
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, err.Error(), 1)
+			return environment.NewNil()
+		}
+		rn, err := right.AsNumber()
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, err.Error(), 1)
+			return environment.NewNil()
+		}
+		return environment.NewNumber(ln - rn)
+	case parser.FigParserSTAR, parser.FigParserSTAREQ:
+		ln, err := left.AsNumber()
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, err.Error(), 1)
+			return environment.NewNil()
+		}
+		rn, err := right.AsNumber()
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, err.Error(), 1)
+			return environment.NewNil()
+		}
+		return environment.NewNumber(ln * rn)
+	case parser.FigParserSLASH, parser.FigParserSLASHEQ:
+		ln, err := left.AsNumber()
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, err.Error(), 1)
+			return environment.NewNil()
+		}
+		rn, err := right.AsNumber()
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, err.Error(), 1)
+			return environment.NewNil()
+		}
+		if rn == 0 {
+			v.RuntimeErr = v.makeRuntimeError(line, col, "division by zero", 1)
+			return environment.NewNil()
+		}
+		return environment.NewNumber(ln / rn)
+	case parser.FigParserMOD, parser.FigParserMODEQ:
+		ln, err := left.AsNumber()
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, err.Error(), 1)
+			return environment.NewNil()
+		}
+		rn, err := right.AsNumber()
+		if err != nil {
+			v.RuntimeErr = v.makeRuntimeError(line, col, err.Error(), 1)
+			return environment.NewNil()
+		}
+		if rn == 0 {
+			v.RuntimeErr = v.makeRuntimeError(line, col, "modulo by zero", 1)
+			return environment.NewNil()
+		}
+		return environment.NewNumber(math.Mod(ln, rn))
+	default:
+		v.RuntimeErr = v.makeRuntimeError(line, col, fmt.Sprintf("unsupported compound operator: %v", op), 1)
+		return environment.NewNil()
+	}
+}
+
 func (v *FigVisitor) VisitVarAtribuition(ctx *parser.VarAtribuitionContext) interface{} {
 	if v.RuntimeErr != nil {
 		return nil
@@ -1029,7 +1109,19 @@ func (v *FigVisitor) VisitVarAtribuition(ctx *parser.VarAtribuitionContext) inte
 		return sig
 	}
 
-	assign := func(name string, vval environment.Value) {
+	// detect assignment operator (ASSIGN or compound)
+	opTok := parser.FigParserASSIGN
+	for _, ch := range ctx.GetChildren() {
+		if tn, ok := ch.(antlr.TerminalNode); ok {
+			t := tn.GetSymbol()
+			switch t.GetTokenType() {
+			case parser.FigParserASSIGN, parser.FigParserPLUSEQ, parser.FigParserMINUSEQ, parser.FigParserSTAREQ, parser.FigParserSLASHEQ, parser.FigParserMODEQ:
+				opTok = t.GetTokenType()
+			}
+		}
+	}
+
+	assignSimple := func(name string, vval environment.Value) {
 		if name == "_" {
 			return
 		}
@@ -1039,7 +1131,33 @@ func (v *FigVisitor) VisitVarAtribuition(ctx *parser.VarAtribuitionContext) inte
 		}
 	}
 
-	// recursive helpers for assignment-destructuring
+	// only simple binding targets (ID) support compound assignment — destructuring not allowed
+	if opTok != parser.FigParserASSIGN {
+		if bt.ArrayPattern() != nil || bt.ObjectPattern() != nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "compound assignment not supported for destructuring", 1)
+			return nil
+		}
+		// must be an ID
+		if bt.ID() == nil {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "invalid lvalue for compound assignment", 1)
+			return nil
+		}
+		name := bt.ID().GetText()
+		cur, ok := v.env.Get(name)
+		if !ok {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), fmt.Sprintf("variable '%s' not defined", name), len(name))
+			return nil
+		}
+		// compute new value using the same semantics as binary operators
+		newVal := v.applyBinaryOp(opTok, cur, val, ctx.GetStart().GetLine(), ctx.GetStart().GetColumn())
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		assignSimple(name, newVal)
+		return nil
+	}
+
+	// recursive helpers for assignment-destructuring (used by plain assignment)
 	var bindArrayForAssign func(ap parser.IArrayPatternContext, src environment.Value)
 	var bindObjectForAssign func(op parser.IObjectPatternContext, src environment.Value)
 
@@ -1058,9 +1176,9 @@ func (v *FigVisitor) VisitVarAtribuition(ctx *parser.VarAtribuitionContext) inte
 			if be.ID() != nil {
 				name := be.ID().GetText()
 				if i < len(elems) {
-					assign(name, elems[i])
+					assignSimple(name, elems[i])
 				} else {
-					assign(name, environment.NewNil())
+					assignSimple(name, environment.NewNil())
 				}
 			} else if be.ArrayPattern() != nil {
 				var nestedSrc environment.Value
@@ -1098,9 +1216,9 @@ func (v *FigVisitor) VisitVarAtribuition(ctx *parser.VarAtribuitionContext) inte
 		for _, id := range op.AllID() {
 			name := id.GetText()
 			if val, ok := entries[name]; ok {
-				assign(name, val)
+				assignSimple(name, val)
 			} else {
-				assign(name, environment.NewNil())
+				assignSimple(name, environment.NewNil())
 			}
 			if v.RuntimeErr != nil {
 				return
@@ -1108,69 +1226,17 @@ func (v *FigVisitor) VisitVarAtribuition(ctx *parser.VarAtribuitionContext) inte
 		}
 	}
 
-	if id := bt.ID(); id != nil {
-		if err := v.env.Assign(id.GetText(), val); err != nil {
-			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), 1)
-		}
+	// plain assign (fallthrough)
+	if bt.ArrayPattern() != nil {
+		bindArrayForAssign(bt.ArrayPattern(), val)
 		return nil
 	}
-
-	if arrPat := bt.ArrayPattern(); arrPat != nil {
-		if val.Type != environment.ArrayType {
-			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "cannot destructure non-array value", 1)
-			return nil
-		}
-		elems := *val.Arr
-		items := arrPat.AllBindingElement()
-		for i, be := range items {
-			if be.ID() != nil {
-				name := be.ID().GetText()
-				if i < len(elems) {
-					assign(name, elems[i])
-				} else {
-					assign(name, environment.NewNil())
-				}
-			} else if be.ArrayPattern() != nil {
-				var nestedSrc environment.Value
-				if i < len(elems) {
-					nestedSrc = elems[i]
-				} else {
-					nestedSrc = environment.NewNil()
-				}
-				bindArrayForAssign(be.ArrayPattern(), nestedSrc)
-			} else if be.ObjectPattern() != nil {
-				var nestedSrc environment.Value
-				if i < len(elems) {
-					nestedSrc = elems[i]
-				} else {
-					nestedSrc = environment.NewNil()
-				}
-				bindObjectForAssign(be.ObjectPattern(), nestedSrc)
-			}
-			if v.RuntimeErr != nil {
-				return nil
-			}
-		}
+	if bt.ObjectPattern() != nil {
+		bindObjectForAssign(bt.ObjectPattern(), val)
 		return nil
 	}
-
-	if objPat := bt.ObjectPattern(); objPat != nil {
-		if val.Type != environment.ObjectType {
-			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "cannot destructure non-object value", 1)
-			return nil
-		}
-		entries := val.Obj.Entries
-		for _, id := range objPat.AllID() {
-			name := id.GetText()
-			if vv, ok := entries[name]; ok {
-				assign(name, vv)
-			} else {
-				assign(name, environment.NewNil())
-			}
-			if v.RuntimeErr != nil {
-				return nil
-			}
-		}
+	if bt.ID() != nil {
+		assignSimple(bt.ID().GetText(), val)
 		return nil
 	}
 	return nil
@@ -2755,7 +2821,7 @@ func (v *FigVisitor) VisitMemberAssign(ctx *parser.MemberAssignContext) interfac
 	}
 
 	// Parse the access chain from the children.
-	// The structure is: expr (access)+ ASSIGN expr SEMICOLON?
+	// The structure is: expr (access)+ (ASSIGN | PLUSEQ | ...) expr SEMICOLON?
 	// The first expr gives us the base, the accesses give us the chain,
 	// and the last expr is the value to assign.
 	allExprs := ctx.AllExpr()
@@ -2763,9 +2829,19 @@ func (v *FigVisitor) VisitMemberAssign(ctx *parser.MemberAssignContext) interfac
 		return nil
 	}
 
-	// The value to assign is the expr right after ASSIGN (second-to-last meaningful expr)
-	// In the grammar: expr (LBRACKET expr RBRACKET | DOT ID)+ ASSIGN expr SEMICOLON?
-	// allExprs includes: base expr, index exprs, and the RHS value expr
+	// detect assignment operator (ASSIGN or compound)
+	opTok := parser.FigParserASSIGN
+	for _, ch := range ctx.GetChildren() {
+		if tn, ok := ch.(antlr.TerminalNode); ok {
+			t := tn.GetSymbol()
+			switch t.GetTokenType() {
+			case parser.FigParserASSIGN, parser.FigParserPLUSEQ, parser.FigParserMINUSEQ, parser.FigParserSTAREQ, parser.FigParserSLASHEQ, parser.FigParserMODEQ:
+				opTok = t.GetTokenType()
+			}
+		}
+	}
+
+	// The value to assign is the expr right after the operator (last expr)
 	rhs := v.VisitExpr(allExprs[len(allExprs)-1].(*parser.ExprContext)).(environment.Value)
 	if v.RuntimeErr != nil {
 		return nil
@@ -2839,7 +2915,7 @@ func (v *FigVisitor) VisitMemberAssign(ctx *parser.MemberAssignContext) interfac
 		}
 	}
 
-	// Apply the last step as assignment
+	// Apply the last step as assignment (supporting compound ops)
 	last := chain[len(chain)-1]
 	if last.isIndex {
 		switch container.Type {
@@ -2856,19 +2932,50 @@ func (v *FigVisitor) VisitMemberAssign(ctx *parser.MemberAssignContext) interfac
 					fmt.Sprintf("array index %d out of range (length %d)", idx, len(arr)), 1)
 				return nil
 			}
-			if idx >= len(arr) {
-				// Auto-grow: fill gaps with null
-				for len(*container.Arr) <= idx {
-					*container.Arr = append(*container.Arr, environment.NewNil())
+			if opTok == parser.FigParserASSIGN {
+				if idx >= len(arr) {
+					// Auto-grow: fill gaps with null
+					for len(*container.Arr) <= idx {
+						*container.Arr = append(*container.Arr, environment.NewNil())
+					}
 				}
+				(*container.Arr)[idx] = rhs
+				return nil
 			}
-			(*container.Arr)[idx] = rhs
+			// compound assignment: read existing (if present), compute, then assign
+			var existing environment.Value
+			if idx < len(arr) {
+				existing = (*container.Arr)[idx]
+			} else {
+				existing = environment.NewNil()
+			}
+			newVal := v.applyBinaryOp(opTok, existing, rhs, ctx.GetStart().GetLine(), ctx.GetStart().GetColumn())
+			if v.RuntimeErr != nil {
+				return nil
+			}
+			// ensure space and write
+			for len(*container.Arr) <= idx {
+				*container.Arr = append(*container.Arr, environment.NewNil())
+			}
+			(*container.Arr)[idx] = newVal
 		case environment.ObjectType:
 			key := last.idx.String()
+			if opTok == parser.FigParserASSIGN {
+				if _, exists := container.Obj.Entries[key]; !exists {
+					container.Obj.Keys = append(container.Obj.Keys, key)
+				}
+				container.Obj.Entries[key] = rhs
+				return nil
+			}
+			existing, _ := container.Obj.Entries[key]
+			newVal := v.applyBinaryOp(opTok, existing, rhs, ctx.GetStart().GetLine(), ctx.GetStart().GetColumn())
+			if v.RuntimeErr != nil {
+				return nil
+			}
 			if _, exists := container.Obj.Entries[key]; !exists {
 				container.Obj.Keys = append(container.Obj.Keys, key)
 			}
-			container.Obj.Entries[key] = rhs
+			container.Obj.Entries[key] = newVal
 		default:
 			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
 				fmt.Sprintf("cannot index into %s", container.TypeName()), 1)
@@ -2876,16 +2983,40 @@ func (v *FigVisitor) VisitMemberAssign(ctx *parser.MemberAssignContext) interfac
 	} else {
 		switch container.Type {
 		case environment.ObjectType:
+			if opTok == parser.FigParserASSIGN {
+				if _, exists := container.Obj.Entries[last.key]; !exists {
+					container.Obj.Keys = append(container.Obj.Keys, last.key)
+				}
+				container.Obj.Entries[last.key] = rhs
+				return nil
+			}
+			existing, _ := container.Obj.Entries[last.key]
+			newVal := v.applyBinaryOp(opTok, existing, rhs, ctx.GetStart().GetLine(), ctx.GetStart().GetColumn())
+			if v.RuntimeErr != nil {
+				return nil
+			}
 			if _, exists := container.Obj.Entries[last.key]; !exists {
 				container.Obj.Keys = append(container.Obj.Keys, last.key)
 			}
-			container.Obj.Entries[last.key] = rhs
+			container.Obj.Entries[last.key] = newVal
 		case environment.InstanceType:
 			inst := container.Inst
+			if opTok == parser.FigParserASSIGN {
+				if _, exists := inst.Fields.Entries[last.key]; !exists {
+					inst.Fields.Keys = append(inst.Fields.Keys, last.key)
+				}
+				inst.Fields.Entries[last.key] = rhs
+				return nil
+			}
+			existing, _ := inst.Fields.Entries[last.key]
+			newVal := v.applyBinaryOp(opTok, existing, rhs, ctx.GetStart().GetLine(), ctx.GetStart().GetColumn())
+			if v.RuntimeErr != nil {
+				return nil
+			}
 			if _, exists := inst.Fields.Entries[last.key]; !exists {
 				inst.Fields.Keys = append(inst.Fields.Keys, last.key)
 			}
-			inst.Fields.Entries[last.key] = rhs
+			inst.Fields.Entries[last.key] = newVal
 		default:
 			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(),
 				fmt.Sprintf("cannot set property '%s' on %s", last.key, container.TypeName()), 1)

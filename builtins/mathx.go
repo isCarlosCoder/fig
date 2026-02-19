@@ -29,7 +29,7 @@ func product(shape []int) int {
 }
 
 // global print options for mathx
-var mathxPrintOptions = struct{
+var mathxPrintOptions = struct {
 	Precision int
 	LineWidth int
 	Threshold int
@@ -1452,46 +1452,54 @@ func init() {
 			return environment.NewArray([]environment.Value{v}), nil
 		}),
 
-	// copy(value) -> returns a shallow copy of arrays/objects (immutable scalars returned as-is)
-	fn("copy", func(args []environment.Value) (environment.Value, error) {
-		if len(args) != 1 { return environment.NewNil(), fmt.Errorf("copy() expects 1 argument") }
-		v := args[0]
-		switch v.Type {
-		case environment.ArrayType:
-			if v.Arr == nil { return environment.NewArray([]environment.Value{}), nil }
-			cp := make([]environment.Value, len(*v.Arr))
-			copy(cp, *v.Arr)
-			return environment.NewArray(cp), nil
-		case environment.ObjectType:
-			if v.Obj == nil { return environment.NewObject(map[string]environment.Value{}, []string{}), nil }
-			entries := make(map[string]environment.Value)
-			keys := make([]string, len(v.Obj.Keys))
-			copy(keys, v.Obj.Keys)
-			for _, k := range keys { entries[k] = v.Obj.Entries[k] }
-			return environment.NewObject(entries, keys), nil
-		default:
-			// scalars/others returned as-is
-			return v, nil
-		}
-	}),
+		// copy(value) -> returns a shallow copy of arrays/objects (immutable scalars returned as-is)
+		fn("copy", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("copy() expects 1 argument")
+			}
+			v := args[0]
+			switch v.Type {
+			case environment.ArrayType:
+				if v.Arr == nil {
+					return environment.NewArray([]environment.Value{}), nil
+				}
+				cp := make([]environment.Value, len(*v.Arr))
+				copy(cp, *v.Arr)
+				return environment.NewArray(cp), nil
+			case environment.ObjectType:
+				if v.Obj == nil {
+					return environment.NewObject(map[string]environment.Value{}, []string{}), nil
+				}
+				entries := make(map[string]environment.Value)
+				keys := make([]string, len(v.Obj.Keys))
+				copy(keys, v.Obj.Keys)
+				for _, k := range keys {
+					entries[k] = v.Obj.Entries[k]
+				}
+				return environment.NewObject(entries, keys), nil
+			default:
+				// scalars/others returned as-is
+				return v, nil
+			}
+		}),
 
-	fn("zeros", func(args []environment.Value) (environment.Value, error) {
-		if len(args) != 1 {
-			return environment.NewNil(), fmt.Errorf("zeros() expects 1 argument (length), got %d", len(args))
-		}
-		n, err := args[0].AsNumber()
-		if err != nil {
-			return environment.NewNil(), fmt.Errorf("zeros() argument must be a number")
-		}
-		if n < 0 {
-			return environment.NewNil(), fmt.Errorf("zeros() length must be non-negative")
-		}
-		arr := make([]environment.Value, int(n))
-		for i := range arr {
-			arr[i] = environment.NewNumber(0)
-		}
-		return environment.NewArray(arr), nil
-	}),
+		fn("zeros", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("zeros() expects 1 argument (length), got %d", len(args))
+			}
+			n, err := args[0].AsNumber()
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("zeros() argument must be a number")
+			}
+			if n < 0 {
+				return environment.NewNil(), fmt.Errorf("zeros() length must be non-negative")
+			}
+			arr := make([]environment.Value, int(n))
+			for i := range arr {
+				arr[i] = environment.NewNumber(0)
+			}
+			return environment.NewArray(arr), nil
+		}),
 
 		fn("zeros_like", func(args []environment.Value) (environment.Value, error) {
 			if len(args) != 1 {
@@ -2826,8 +2834,13 @@ func init() {
 		// --- polynomial helpers ---
 
 		fn("polyval", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 2 { return environment.NewNil(), fmt.Errorf("polyval() expects 2 arguments (coeffs, x)") }
-			coeffs, err := flattenNumbers(args[0]); if err != nil { return environment.NewNil(), fmt.Errorf("polyval(): coeffs must be numeric array or number") }
+			if len(args) != 2 {
+				return environment.NewNil(), fmt.Errorf("polyval() expects 2 arguments (coeffs, x)")
+			}
+			coeffs, err := flattenNumbers(args[0])
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("polyval(): coeffs must be numeric array or number")
+			}
 			x := args[1]
 			// Horner's method (coeffs in highest-first order)
 			evalAt := func(xx float64) float64 {
@@ -2840,52 +2853,104 @@ func init() {
 			if x.Type == environment.ArrayType && x.Arr != nil {
 				out := make([]environment.Value, len(*x.Arr))
 				for i, e := range *x.Arr {
-					if e.Type != environment.NumberType { return environment.NewNil(), fmt.Errorf("polyval(): x array must be numeric") }
+					if e.Type != environment.NumberType {
+						return environment.NewNil(), fmt.Errorf("polyval(): x array must be numeric")
+					}
 					out[i] = environment.NewNumber(evalAt(e.Num))
 				}
 				return environment.NewArray(out), nil
 			}
-			if x.Type != environment.NumberType { return environment.NewNil(), fmt.Errorf("polyval(): x must be number or array") }
+			if x.Type != environment.NumberType {
+				return environment.NewNil(), fmt.Errorf("polyval(): x must be number or array")
+			}
 			return environment.NewNumber(evalAt(x.Num)), nil
 		}),
 
 		fn("polyadd", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 2 { return environment.NewNil(), fmt.Errorf("polyadd() expects 2 arguments") }
-			a, err := flattenNumbers(args[0]); if err != nil { return environment.NewNil(), err }
-			b, err := flattenNumbers(args[1]); if err != nil { return environment.NewNil(), err }
+			if len(args) != 2 {
+				return environment.NewNil(), fmt.Errorf("polyadd() expects 2 arguments")
+			}
+			a, err := flattenNumbers(args[0])
+			if err != nil {
+				return environment.NewNil(), err
+			}
+			b, err := flattenNumbers(args[1])
+			if err != nil {
+				return environment.NewNil(), err
+			}
 			// align to left (highest-first) by padding shorter with leading zeros
-			la := len(a); lb := len(b); lm := la
-			if lb > lm { lm = lb }
+			la := len(a)
+			lb := len(b)
+			lm := la
+			if lb > lm {
+				lm = lb
+			}
 			r := make([]environment.Value, lm)
-			pa := make([]float64, lm); pb := make([]float64, lm)
-			copy(pa[lm-la:], a); copy(pb[lm-lb:], b)
-			for i := 0; i < lm; i++ { r[i] = environment.NewNumber(pa[i] + pb[i]) }
+			pa := make([]float64, lm)
+			pb := make([]float64, lm)
+			copy(pa[lm-la:], a)
+			copy(pb[lm-lb:], b)
+			for i := 0; i < lm; i++ {
+				r[i] = environment.NewNumber(pa[i] + pb[i])
+			}
 			return environment.NewArray(r), nil
 		}),
 
 		fn("polysub", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 2 { return environment.NewNil(), fmt.Errorf("polysub() expects 2 arguments") }
-			a, err := flattenNumbers(args[0]); if err != nil { return environment.NewNil(), err }
-			b, err := flattenNumbers(args[1]); if err != nil { return environment.NewNil(), err }
-			la := len(a); lb := len(b); lm := la
-			if lb > lm { lm = lb }
+			if len(args) != 2 {
+				return environment.NewNil(), fmt.Errorf("polysub() expects 2 arguments")
+			}
+			a, err := flattenNumbers(args[0])
+			if err != nil {
+				return environment.NewNil(), err
+			}
+			b, err := flattenNumbers(args[1])
+			if err != nil {
+				return environment.NewNil(), err
+			}
+			la := len(a)
+			lb := len(b)
+			lm := la
+			if lb > lm {
+				lm = lb
+			}
 			r := make([]environment.Value, lm)
-			pa := make([]float64, lm); pb := make([]float64, lm)
-			copy(pa[lm-la:], a); copy(pb[lm-lb:], b)
-			for i := 0; i < lm; i++ { r[i] = environment.NewNumber(pa[i] - pb[i]) }
+			pa := make([]float64, lm)
+			pb := make([]float64, lm)
+			copy(pa[lm-la:], a)
+			copy(pb[lm-lb:], b)
+			for i := 0; i < lm; i++ {
+				r[i] = environment.NewNumber(pa[i] - pb[i])
+			}
 			return environment.NewArray(r), nil
 		}),
 
 		fn("polymul", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 2 { return environment.NewNil(), fmt.Errorf("polymul() expects 2 arguments") }
-			a, err := flattenNumbers(args[0]); if err != nil { return environment.NewNil(), err }
-			b, err := flattenNumbers(args[1]); if err != nil { return environment.NewNil(), err }
-			la := len(a); lb := len(b)
-			if la == 0 || lb == 0 { return environment.NewArray([]environment.Value{}), nil }
+			if len(args) != 2 {
+				return environment.NewNil(), fmt.Errorf("polymul() expects 2 arguments")
+			}
+			a, err := flattenNumbers(args[0])
+			if err != nil {
+				return environment.NewNil(), err
+			}
+			b, err := flattenNumbers(args[1])
+			if err != nil {
+				return environment.NewNil(), err
+			}
+			la := len(a)
+			lb := len(b)
+			if la == 0 || lb == 0 {
+				return environment.NewArray([]environment.Value{}), nil
+			}
 			// operate in reverse (constant-term first), then reverse result
-			ra := make([]float64, la); rb := make([]float64, lb)
-			for i := 0; i < la; i++ { ra[i] = a[la-1-i] }
-			for i := 0; i < lb; i++ { rb[i] = b[lb-1-i] }
+			ra := make([]float64, la)
+			rb := make([]float64, lb)
+			for i := 0; i < la; i++ {
+				ra[i] = a[la-1-i]
+			}
+			for i := 0; i < lb; i++ {
+				rb[i] = b[lb-1-i]
+			}
 			rc := make([]float64, la+lb-1)
 			for i := 0; i < la; i++ {
 				for j := 0; j < lb; j++ {
@@ -2893,15 +2958,24 @@ func init() {
 				}
 			}
 			out := make([]environment.Value, len(rc))
-			for i := 0; i < len(rc); i++ { out[i] = environment.NewNumber(rc[len(rc)-1-i]) }
+			for i := 0; i < len(rc); i++ {
+				out[i] = environment.NewNumber(rc[len(rc)-1-i])
+			}
 			return environment.NewArray(out), nil
 		}),
 
 		fn("polyder", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 1 { return environment.NewNil(), fmt.Errorf("polyder() expects 1 argument") }
-			a, err := flattenNumbers(args[0]); if err != nil { return environment.NewNil(), err }
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("polyder() expects 1 argument")
+			}
+			a, err := flattenNumbers(args[0])
+			if err != nil {
+				return environment.NewNil(), err
+			}
 			n := len(a) - 1
-			if n <= 0 { return environment.NewArray([]environment.Value{environment.NewNumber(0)}), nil }
+			if n <= 0 {
+				return environment.NewArray([]environment.Value{environment.NewNumber(0)}), nil
+			}
 			out := make([]environment.Value, n)
 			for i := 0; i < n; i++ {
 				exp := float64(n - i)
@@ -2912,11 +2986,19 @@ func init() {
 
 		fn("polyint", func(args []environment.Value) (environment.Value, error) {
 			// polyint(coeffs[, k]) -> integrated coefficients (highest-first), optional integration constant k (number)
-			if len(args) < 1 || len(args) > 2 { return environment.NewNil(), fmt.Errorf("polyint() expects 1 or 2 arguments") }
-			a, err := flattenNumbers(args[0]); if err != nil { return environment.NewNil(), err }
+			if len(args) < 1 || len(args) > 2 {
+				return environment.NewNil(), fmt.Errorf("polyint() expects 1 or 2 arguments")
+			}
+			a, err := flattenNumbers(args[0])
+			if err != nil {
+				return environment.NewNil(), err
+			}
 			k := 0.0
 			if len(args) == 2 {
-				kv, err := args[1].AsNumber(); if err != nil { return environment.NewNil(), fmt.Errorf("polyint(): constant must be number") }
+				kv, err := args[1].AsNumber()
+				if err != nil {
+					return environment.NewNil(), fmt.Errorf("polyint(): constant must be number")
+				}
 				k = kv
 			}
 			m := len(a)
@@ -2931,15 +3013,32 @@ func init() {
 
 		fn("polyfit", func(args []environment.Value) (environment.Value, error) {
 			// polyfit(x, y, deg)
-			if len(args) != 3 { return environment.NewNil(), fmt.Errorf("polyfit() expects 3 arguments (x, y, deg)") }
-			xv, err := flattenNumbers(args[0]); if err != nil { return environment.NewNil(), fmt.Errorf("polyfit(): x must be numeric array") }
-			yv, err := flattenNumbers(args[1]); if err != nil { return environment.NewNil(), fmt.Errorf("polyfit(): y must be numeric array") }
-			degF, err := args[2].AsNumber(); if err != nil { return environment.NewNil(), fmt.Errorf("polyfit(): deg must be number") }
+			if len(args) != 3 {
+				return environment.NewNil(), fmt.Errorf("polyfit() expects 3 arguments (x, y, deg)")
+			}
+			xv, err := flattenNumbers(args[0])
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("polyfit(): x must be numeric array")
+			}
+			yv, err := flattenNumbers(args[1])
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("polyfit(): y must be numeric array")
+			}
+			degF, err := args[2].AsNumber()
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("polyfit(): deg must be number")
+			}
 			deg := int(degF)
 			n := len(xv)
-			if n != len(yv) { return environment.NewNil(), fmt.Errorf("polyfit(): x and y must have same length") }
-			if n == 0 || deg < 0 { return environment.NewNil(), fmt.Errorf("polyfit(): invalid inputs") }
-			if n <= deg { return environment.NewNil(), fmt.Errorf("polyfit(): number of points must be greater than deg") }
+			if n != len(yv) {
+				return environment.NewNil(), fmt.Errorf("polyfit(): x and y must have same length")
+			}
+			if n == 0 || deg < 0 {
+				return environment.NewNil(), fmt.Errorf("polyfit(): invalid inputs")
+			}
+			if n <= deg {
+				return environment.NewNil(), fmt.Errorf("polyfit(): number of points must be greater than deg")
+			}
 			// build design matrix A (n x (deg+1)) with powers x^(deg - j)
 			p := deg + 1
 			A := make([][]float64, n)
@@ -2956,38 +3055,52 @@ func init() {
 				ATA[i] = make([]float64, p)
 				for j := 0; j < p; j++ {
 					s := 0.0
-					for k := 0; k < n; k++ { s += A[k][i] * A[k][j] }
+					for k := 0; k < n; k++ {
+						s += A[k][i] * A[k][j]
+					}
 					ATA[i][j] = s
 				}
 			}
 			ATy := make([]float64, p)
 			for i := 0; i < p; i++ {
 				s := 0.0
-				for k := 0; k < n; k++ { s += A[k][i] * yv[k] }
+				for k := 0; k < n; k++ {
+					s += A[k][i] * yv[k]
+				}
 				ATy[i] = s
 			}
 			coeffs, err := solveLinear(ATA, ATy)
-			if err != nil { return environment.NewNil(), fmt.Errorf("polyfit(): solve failed: %v", err) }
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("polyfit(): solve failed: %v", err)
+			}
 			out := make([]environment.Value, len(coeffs))
-			for i := range coeffs { out[i] = environment.NewNumber(coeffs[i]) }
+			for i := range coeffs {
+				out[i] = environment.NewNumber(coeffs[i])
+			}
 			return environment.NewArray(out), nil
 		}),
 
 		// --- utility helpers: ndim/size/itemsize/copyto/view and printoptions ---
 		fn("ndim", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 1 { return environment.NewNil(), fmt.Errorf("ndim() expects 1 argument") }
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("ndim() expects 1 argument")
+			}
 			sh := shapeOf(args[0])
 			return environment.NewNumber(float64(len(sh))), nil
 		}),
 
 		fn("size", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 1 { return environment.NewNil(), fmt.Errorf("size() expects 1 argument") }
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("size() expects 1 argument")
+			}
 			sh := shapeOf(args[0])
 			return environment.NewNumber(float64(product(sh))), nil
 		}),
 
 		fn("itemsize", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 1 { return environment.NewNil(), fmt.Errorf("itemsize() expects 1 argument") }
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("itemsize() expects 1 argument")
+			}
 			var infer func(environment.Value) int
 			infer = func(v environment.Value) int {
 				switch v.Type {
@@ -2998,9 +3111,13 @@ func init() {
 				case environment.StringType:
 					return len(v.Str)
 				case environment.ArrayType:
-					if v.Arr == nil || len(*v.Arr) == 0 { return 0 }
+					if v.Arr == nil || len(*v.Arr) == 0 {
+						return 0
+					}
 					for _, e := range *v.Arr {
-						if e.Type != environment.NilType { return infer(e) }
+						if e.Type != environment.NilType {
+							return infer(e)
+						}
 					}
 					return 0
 				default:
@@ -3012,26 +3129,40 @@ func init() {
 		}),
 
 		fn("copyto", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 2 { return environment.NewNil(), fmt.Errorf("copyto() expects 2 arguments (dest, src)") }
+			if len(args) != 2 {
+				return environment.NewNil(), fmt.Errorf("copyto() expects 2 arguments (dest, src)")
+			}
 			dest := args[0]
 			src := args[1]
-			if dest.Type != environment.ArrayType || dest.Arr == nil { return environment.NewNil(), fmt.Errorf("copyto(): dest must be array") }
+			if dest.Type != environment.ArrayType || dest.Arr == nil {
+				return environment.NewNil(), fmt.Errorf("copyto(): dest must be array")
+			}
 			// scalar src -> fill dest
 			if src.Type != environment.ArrayType || src.Arr == nil {
-				for i := range *dest.Arr { (*dest.Arr)[i] = src }
+				for i := range *dest.Arr {
+					(*dest.Arr)[i] = src
+				}
 				return dest, nil
 			}
 			// both arrays -> lengths must match
 			srcFlat := flattenValues(src)
-			if len(srcFlat) != len(*dest.Arr) { return environment.NewNil(), fmt.Errorf("copyto(): source and destination must have same size") }
-			for i := range srcFlat { (*dest.Arr)[i] = srcFlat[i] }
+			if len(srcFlat) != len(*dest.Arr) {
+				return environment.NewNil(), fmt.Errorf("copyto(): source and destination must have same size")
+			}
+			for i := range srcFlat {
+				(*dest.Arr)[i] = srcFlat[i]
+			}
 			return dest, nil
 		}),
 
 		fn("view", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 1 { return environment.NewNil(), fmt.Errorf("view() expects 1 argument") }
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("view() expects 1 argument")
+			}
 			v := args[0]
-			if v.Type != environment.ArrayType || v.Arr == nil { return environment.NewNil(), fmt.Errorf("view(): expects array") }
+			if v.Type != environment.ArrayType || v.Arr == nil {
+				return environment.NewNil(), fmt.Errorf("view(): expects array")
+			}
 			// return the same array value (shared backing)
 			return v, nil
 		}),
@@ -3047,32 +3178,50 @@ func init() {
 		}),
 
 		fn("set_printoptions", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 1 { return environment.NewNil(), fmt.Errorf("set_printoptions() expects 1 argument (object)") }
-			if args[0].Type != environment.ObjectType || args[0].Obj == nil { return environment.NewNil(), fmt.Errorf("set_printoptions(): argument must be object") }
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("set_printoptions() expects 1 argument (object)")
+			}
+			if args[0].Type != environment.ObjectType || args[0].Obj == nil {
+				return environment.NewNil(), fmt.Errorf("set_printoptions(): argument must be object")
+			}
 			for _, k := range args[0].Obj.Keys {
 				v := args[0].Obj.Entries[k]
 				switch k {
 				case "precision":
-					if n, err := v.AsNumber(); err == nil { mathxPrintOptions.Precision = int(n) }
+					if n, err := v.AsNumber(); err == nil {
+						mathxPrintOptions.Precision = int(n)
+					}
 				case "linewidth":
-					if n, err := v.AsNumber(); err == nil { mathxPrintOptions.LineWidth = int(n) }
+					if n, err := v.AsNumber(); err == nil {
+						mathxPrintOptions.LineWidth = int(n)
+					}
 				case "threshold":
-					if n, err := v.AsNumber(); err == nil { mathxPrintOptions.Threshold = int(n) }
+					if n, err := v.AsNumber(); err == nil {
+						mathxPrintOptions.Threshold = int(n)
+					}
 				}
 			}
 			return environment.NewNil(), nil
 		}),
 
 		fn("negative", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 1 { return environment.NewNil(), fmt.Errorf("negative() expects 1 argument") }
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("negative() expects 1 argument")
+			}
 			return applyUnaryNumeric("negative", args[0], func(x float64) float64 { return -x })
 		}),
 
 		fn("sign", func(args []environment.Value) (environment.Value, error) {
-			if len(args) != 1 { return environment.NewNil(), fmt.Errorf("sign() expects 1 argument") }
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("sign() expects 1 argument")
+			}
 			return applyUnaryNumeric("sign", args[0], func(x float64) float64 {
-				if x > 0 { return 1 }
-				if x < 0 { return -1 }
+				if x > 0 {
+					return 1
+				}
+				if x < 0 {
+					return -1
+				}
 				return 0
 			})
 		}),

@@ -1077,60 +1077,99 @@ func TestMathxComparisonsAndLogic(t *testing.T) {
 
 	// equal / not_equal (scalar)
 	r, err := equalFn.Builtin([]environment.Value{environment.NewNumber(1), environment.NewNumber(1)})
-	if err != nil { t.Fatalf("equal error: %v", err) }
-	if !r.IsTruthy() { t.Fatalf("equal scalar wrong: %v", r) }
+	if err != nil {
+		t.Fatalf("equal error: %v", err)
+	}
+	if !r.IsTruthy() {
+		t.Fatalf("equal scalar wrong: %v", r)
+	}
 	r, _ = equalFn.Builtin([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)})
-	if r.IsTruthy() { t.Fatalf("equal scalar wrong: %v", r) }
+	if r.IsTruthy() {
+		t.Fatalf("equal scalar wrong: %v", r)
+	}
 	rn, _ := noteqFn.Builtin([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)})
-	if !rn.IsTruthy() { t.Fatalf("not_equal scalar wrong: %v", rn) }
+	if !rn.IsTruthy() {
+		t.Fatalf("not_equal scalar wrong: %v", rn)
+	}
 
 	// equal (array)
 	a1 := environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2), environment.NewNumber(3)})
 	a2 := environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(0), environment.NewNumber(3)})
 	res, err := equalFn.Builtin([]environment.Value{a1, a2})
-	if err != nil { t.Fatalf("equal array error: %v", err) }
+	if err != nil {
+		t.Fatalf("equal array error: %v", err)
+	}
 	flat := *res.Arr
-	if !flat[0].IsTruthy() || flat[1].IsTruthy() || !flat[2].IsTruthy() { t.Fatalf("equal array wrong: %v", res) }
+	if !flat[0].IsTruthy() || flat[1].IsTruthy() || !flat[2].IsTruthy() {
+		t.Fatalf("equal array wrong: %v", res)
+	}
 
 	// comparisons
 	sc, _ := gt.Builtin([]environment.Value{environment.NewNumber(5), environment.NewNumber(2)})
-	if !sc.IsTruthy() { t.Fatalf("greater scalar wrong: %v", sc) }
+	if !sc.IsTruthy() {
+		t.Fatalf("greater scalar wrong: %v", sc)
+	}
 	arrGt, _ := gt.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(5)}), environment.NewNumber(2)})
-	if !(*arrGt.Arr)[0].IsTruthy() || !(*arrGt.Arr)[1].IsTruthy() == false { /* ok */ }
+	if !(*arrGt.Arr)[0].IsTruthy() || !(*arrGt.Arr)[1].IsTruthy() == false { /* ok */
+	}
 
 	// logical ops
 	b1 := environment.NewArray([]environment.Value{environment.NewBool(true), environment.NewBool(false), environment.NewBool(true)})
 	b2 := environment.NewArray([]environment.Value{environment.NewBool(false), environment.NewBool(true), environment.NewBool(true)})
 	andRes, err := land.Builtin([]environment.Value{b1, b2})
-	if err != nil { t.Fatalf("logical_and error: %v", err) }
-	if (*andRes.Arr)[0].IsTruthy() || (*andRes.Arr)[1].IsTruthy() || !(*andRes.Arr)[2].IsTruthy() { t.Fatalf("logical_and wrong: %v", andRes) }
+	if err != nil {
+		t.Fatalf("logical_and error: %v", err)
+	}
+	if (*andRes.Arr)[0].IsTruthy() || (*andRes.Arr)[1].IsTruthy() || !(*andRes.Arr)[2].IsTruthy() {
+		t.Fatalf("logical_and wrong: %v", andRes)
+	}
 	orRes, _ := lor.Builtin([]environment.Value{b1, b2})
-	if !(*orRes.Arr)[0].IsTruthy() || !(*orRes.Arr)[1].IsTruthy() || !(*orRes.Arr)[2].IsTruthy() { t.Fatalf("logical_or wrong: %v", orRes) }
+	if !(*orRes.Arr)[0].IsTruthy() || !(*orRes.Arr)[1].IsTruthy() || !(*orRes.Arr)[2].IsTruthy() {
+		t.Fatalf("logical_or wrong: %v", orRes)
+	}
 	xorRes, _ := lxor.Builtin([]environment.Value{b1, b2})
-	if !(*xorRes.Arr)[0].IsTruthy() || !(*xorRes.Arr)[1].IsTruthy() || (*xorRes.Arr)[2].IsTruthy() { t.Fatalf("logical_xor wrong: %v", xorRes) }
+	if !(*xorRes.Arr)[0].IsTruthy() || !(*xorRes.Arr)[1].IsTruthy() || (*xorRes.Arr)[2].IsTruthy() {
+		t.Fatalf("logical_xor wrong: %v", xorRes)
+	}
 	notRes, _ := notFn.Builtin([]environment.Value{b1})
-	if (*notRes.Arr)[0].IsTruthy() || !(*notRes.Arr)[1].IsTruthy() || (*notRes.Arr)[2].IsTruthy() { t.Fatalf("logical_not wrong: %v", notRes) }
+	if (*notRes.Arr)[0].IsTruthy() || !(*notRes.Arr)[1].IsTruthy() || (*notRes.Arr)[2].IsTruthy() {
+		t.Fatalf("logical_not wrong: %v", notRes)
+	}
 
 	// all / any
 	allTrue, _ := allFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewBool(true), environment.NewBool(true)})})
-	if !allTrue.IsTruthy() { t.Fatalf("all wrong: %v", allTrue) }
+	if !allTrue.IsTruthy() {
+		t.Fatalf("all wrong: %v", allTrue)
+	}
 	anyTrue, _ := anyFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewBool(false), environment.NewBool(true)})})
-	if !anyTrue.IsTruthy() { t.Fatalf("any wrong: %v", anyTrue) }
+	if !anyTrue.IsTruthy() {
+		t.Fatalf("any wrong: %v", anyTrue)
+	}
 
 	// isfinite / isinf / isnan
 	nums := environment.NewArray([]environment.Value{environment.NewNumber(math.NaN()), environment.NewNumber(math.Inf(1)), environment.NewNumber(1)})
 	isnanRes, _ := isnanFn.Builtin([]environment.Value{nums})
-	if !(*isnanRes.Arr)[0].IsTruthy() || (*isnanRes.Arr)[1].IsTruthy() || (*isnanRes.Arr)[2].IsTruthy() { t.Fatalf("isnan wrong: %v", isnanRes) }
+	if !(*isnanRes.Arr)[0].IsTruthy() || (*isnanRes.Arr)[1].IsTruthy() || (*isnanRes.Arr)[2].IsTruthy() {
+		t.Fatalf("isnan wrong: %v", isnanRes)
+	}
 	isinfRes, _ := isinfFn.Builtin([]environment.Value{nums})
-	if (*isinfRes.Arr)[0].IsTruthy() || !(*isinfRes.Arr)[1].IsTruthy() || (*isinfRes.Arr)[2].IsTruthy() { t.Fatalf("isinf wrong: %v", isinfRes) }
+	if (*isinfRes.Arr)[0].IsTruthy() || !(*isinfRes.Arr)[1].IsTruthy() || (*isinfRes.Arr)[2].IsTruthy() {
+		t.Fatalf("isinf wrong: %v", isinfRes)
+	}
 	isfiniteRes, _ := isfiniteFn.Builtin([]environment.Value{nums})
-	if (*isfiniteRes.Arr)[0].IsTruthy() || (*isfiniteRes.Arr)[1].IsTruthy() || !(*isfiniteRes.Arr)[2].IsTruthy() { t.Fatalf("isfinite wrong: %v", isfiniteRes) }
+	if (*isfiniteRes.Arr)[0].IsTruthy() || (*isfiniteRes.Arr)[1].IsTruthy() || !(*isfiniteRes.Arr)[2].IsTruthy() {
+		t.Fatalf("isfinite wrong: %v", isfiniteRes)
+	}
 
 	// isclose
 	ic, _ := iscloseFn.Builtin([]environment.Value{environment.NewNumber(1.0000000001), environment.NewNumber(1.0)})
-	if !ic.IsTruthy() { t.Fatalf("isclose scalar wrong: %v", ic) }
+	if !ic.IsTruthy() {
+		t.Fatalf("isclose scalar wrong: %v", ic)
+	}
 	icarr, _ := iscloseFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)}), environment.NewArray([]environment.Value{environment.NewNumber(1.0), environment.NewNumber(3.0)})})
-	if !(*icarr.Arr)[0].IsTruthy() || (*icarr.Arr)[1].IsTruthy() { t.Fatalf("isclose array wrong: %v", icarr) }
+	if !(*icarr.Arr)[0].IsTruthy() || (*icarr.Arr)[1].IsTruthy() {
+		t.Fatalf("isclose array wrong: %v", icarr)
+	}
 }
 
 func TestMathxSortingAndSetOps(t *testing.T) {
@@ -1147,7 +1186,9 @@ func TestMathxSortingAndSetOps(t *testing.T) {
 
 	// sort / argsort
 	sout, err := sortFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(1), environment.NewNumber(2)})})
-	if err != nil { t.Fatalf("sort error: %v", err) }
+	if err != nil {
+		t.Fatalf("sort error: %v", err)
+	}
 	numSliceEquals(t, *sout.Arr, []float64{1, 2, 3})
 	ai, _ := argsortFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(1), environment.NewNumber(2)})})
 	numSliceEquals(t, *ai.Arr, []float64{1, 2, 0})
@@ -1158,13 +1199,19 @@ func TestMathxSortingAndSetOps(t *testing.T) {
 		environment.NewArray([]environment.Value{environment.NewNumber(0), environment.NewNumber(1), environment.NewNumber(0)}),
 	})
 	ls, err := lexsortFn.Builtin([]environment.Value{keys})
-	if err != nil { t.Fatalf("lexsort error: %v", err) }
+	if err != nil {
+		t.Fatalf("lexsort error: %v", err)
+	}
 	numSliceEquals(t, *ls.Arr, []float64{0, 2, 1})
 
 	// partition / argpartition
 	p, err := partitionFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(1), environment.NewNumber(2)}), environment.NewNumber(1)})
-	if err != nil { t.Fatalf("partition error: %v", err) }
-	if (*p.Arr)[1].Num != 2 { t.Fatalf("partition wrong: %v", p) }
+	if err != nil {
+		t.Fatalf("partition error: %v", err)
+	}
+	if (*p.Arr)[1].Num != 2 {
+		t.Fatalf("partition wrong: %v", p)
+	}
 	ap, _ := argpartFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(1), environment.NewNumber(2)}), environment.NewNumber(1)})
 	numSliceEquals(t, *ap.Arr, []float64{1, 2, 0})
 
@@ -1183,7 +1230,8 @@ func TestMathxSortingAndSetOps(t *testing.T) {
 
 	// in1d
 	inRes, _ := in1dFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2), environment.NewNumber(3)}), environment.NewArray([]environment.Value{environment.NewNumber(2), environment.NewNumber(4)})})
-	if !(*inRes.Arr)[0].IsTruthy() == false || !(*inRes.Arr)[1].IsTruthy() || (*inRes.Arr)[2].IsTruthy() { /* ok */ }
+	if !(*inRes.Arr)[0].IsTruthy() == false || !(*inRes.Arr)[1].IsTruthy() || (*inRes.Arr)[2].IsTruthy() { /* ok */
+	}
 }
 
 func TestMathxRandom(t *testing.T) {
@@ -1204,61 +1252,107 @@ func TestMathxRandom(t *testing.T) {
 
 	// rand / random (scalar + array)
 	r, err := randFn.Builtin([]environment.Value{})
-	if err != nil { t.Fatalf("rand error: %v", err) }
-	if r.Type != environment.NumberType || !(r.Num >= 0 && r.Num < 1) { t.Fatalf("rand scalar wrong: %v", r) }
+	if err != nil {
+		t.Fatalf("rand error: %v", err)
+	}
+	if r.Type != environment.NumberType || !(r.Num >= 0 && r.Num < 1) {
+		t.Fatalf("rand scalar wrong: %v", r)
+	}
 	rarr, err := randFn.Builtin([]environment.Value{environment.NewNumber(3)})
-	if err != nil { t.Fatalf("rand array error: %v", err) }
-	if len(*rarr.Arr) != 3 { t.Fatalf("rand array wrong length: %v", rarr) }
+	if err != nil {
+		t.Fatalf("rand array error: %v", err)
+	}
+	if len(*rarr.Arr) != 3 {
+		t.Fatalf("rand array wrong length: %v", rarr)
+	}
 	r2, _ := randomFn.Builtin([]environment.Value{environment.NewNumber(2)})
-	if len(*r2.Arr) != 2 { t.Fatalf("random alias wrong: %v", r2) }
+	if len(*r2.Arr) != 2 {
+		t.Fatalf("random alias wrong: %v", r2)
+	}
 
 	// randn
 	rn, err := randnFn.Builtin([]environment.Value{})
-	if err != nil { t.Fatalf("randn error: %v", err) }
-	if rn.Type != environment.NumberType || math.IsNaN(rn.Num) { t.Fatalf("randn scalar wrong: %v", rn) }
+	if err != nil {
+		t.Fatalf("randn error: %v", err)
+	}
+	if rn.Type != environment.NumberType || math.IsNaN(rn.Num) {
+		t.Fatalf("randn scalar wrong: %v", rn)
+	}
 
 	// randint scalar and array
 	ri, _ := randintFn.Builtin([]environment.Value{environment.NewNumber(5)})
-	if ri.Type != environment.NumberType || int(ri.Num) < 0 || int(ri.Num) >= 5 { t.Fatalf("randint(5) wrong: %v", ri) }
+	if ri.Type != environment.NumberType || int(ri.Num) < 0 || int(ri.Num) >= 5 {
+		t.Fatalf("randint(5) wrong: %v", ri)
+	}
 	ri2, _ := randintFn.Builtin([]environment.Value{environment.NewNumber(1), environment.NewNumber(4), environment.NewNumber(3)})
-	if ri2.Type != environment.ArrayType || len(*ri2.Arr) != 3 { t.Fatalf("randint array wrong: %v", ri2) }
+	if ri2.Type != environment.ArrayType || len(*ri2.Arr) != 3 {
+		t.Fatalf("randint array wrong: %v", ri2)
+	}
 
 	// choice from array and from integer
 	src := environment.NewArray([]environment.Value{environment.NewNumber(10), environment.NewNumber(20), environment.NewNumber(30)})
 	c, err := choiceFn.Builtin([]environment.Value{src})
-	if err != nil { t.Fatalf("choice error: %v", err) }
-	if c.Type != environment.NumberType { t.Fatalf("choice scalar wrong: %v", c) }
+	if err != nil {
+		t.Fatalf("choice error: %v", err)
+	}
+	if c.Type != environment.NumberType {
+		t.Fatalf("choice scalar wrong: %v", c)
+	}
 	carr, _ := choiceFn.Builtin([]environment.Value{src, environment.NewNumber(2)})
-	if carr.Type != environment.ArrayType || len(*carr.Arr) != 2 { t.Fatalf("choice size wrong: %v", carr) }
+	if carr.Type != environment.ArrayType || len(*carr.Arr) != 2 {
+		t.Fatalf("choice size wrong: %v", carr)
+	}
 	cfromn, _ := choiceFn.Builtin([]environment.Value{environment.NewNumber(5), environment.NewNumber(3)})
-	if cfromn.Type != environment.ArrayType || len(*cfromn.Arr) != 3 { t.Fatalf("choice from int wrong: %v", cfromn) }
+	if cfromn.Type != environment.ArrayType || len(*cfromn.Arr) != 3 {
+		t.Fatalf("choice from int wrong: %v", cfromn)
+	}
 
 	// shuffle (in-place) and permutation
 	arrToShuffle := environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2), environment.NewNumber(3)})
 	_, err = shuffleFn.Builtin([]environment.Value{arrToShuffle})
-	if err != nil { t.Fatalf("shuffle error: %v", err) }
+	if err != nil {
+		t.Fatalf("shuffle error: %v", err)
+	}
 	// perm from n
 	perm, err := permFn.Builtin([]environment.Value{environment.NewNumber(4)})
-	if err != nil { t.Fatalf("permutation error: %v", err) }
-	if len(*perm.Arr) != 4 { t.Fatalf("permutation length wrong: %v", perm) }
+	if err != nil {
+		t.Fatalf("permutation error: %v", err)
+	}
+	if len(*perm.Arr) != 4 {
+		t.Fatalf("permutation length wrong: %v", perm)
+	}
 
 	// normal / uniform
 	normv, _ := normalFn.Builtin([]environment.Value{})
-	if normv.Type != environment.NumberType || math.IsNaN(normv.Num) { t.Fatalf("normal scalar wrong: %v", normv) }
+	if normv.Type != environment.NumberType || math.IsNaN(normv.Num) {
+		t.Fatalf("normal scalar wrong: %v", normv)
+	}
 	unif, _ := uniformFn.Builtin([]environment.Value{environment.NewNumber(5.0), environment.NewNumber(6.0)})
-	if unif.Type != environment.NumberType || unif.Num < 5.0 || unif.Num >= 6.0 { t.Fatalf("uniform scalar wrong: %v", unif) }
+	if unif.Type != environment.NumberType || unif.Num < 5.0 || unif.Num >= 6.0 {
+		t.Fatalf("uniform scalar wrong: %v", unif)
+	}
 
 	// binomial / poisson / exponential / gamma / beta (basic property checks)
 	b, _ := binomFn.Builtin([]environment.Value{environment.NewNumber(5), environment.NewNumber(0.5)})
-	if b.Type != environment.NumberType || b.Num < 0 || b.Num > 5 { t.Fatalf("binomial wrong: %v", b) }
+	if b.Type != environment.NumberType || b.Num < 0 || b.Num > 5 {
+		t.Fatalf("binomial wrong: %v", b)
+	}
 	po, _ := poisFn.Builtin([]environment.Value{environment.NewNumber(2.0)})
-	if po.Type != environment.NumberType || po.Num < 0 { t.Fatalf("poisson wrong: %v", po) }
+	if po.Type != environment.NumberType || po.Num < 0 {
+		t.Fatalf("poisson wrong: %v", po)
+	}
 	e, _ := expFn.Builtin([]environment.Value{environment.NewNumber(2.0)})
-	if e.Type != environment.NumberType || e.Num < 0 { t.Fatalf("exponential wrong: %v", e) }
+	if e.Type != environment.NumberType || e.Num < 0 {
+		t.Fatalf("exponential wrong: %v", e)
+	}
 	g, _ := gammaFn.Builtin([]environment.Value{environment.NewNumber(2), environment.NewNumber(1.0)})
-	if g.Type != environment.NumberType || g.Num <= 0 { t.Fatalf("gamma wrong: %v", g) }
+	if g.Type != environment.NumberType || g.Num <= 0 {
+		t.Fatalf("gamma wrong: %v", g)
+	}
 	bb, _ := betaFn.Builtin([]environment.Value{environment.NewNumber(2), environment.NewNumber(3)})
-	if bb.Type != environment.NumberType || bb.Num < 0 || bb.Num > 1 { t.Fatalf("beta wrong: %v", bb) }
+	if bb.Type != environment.NumberType || bb.Num < 0 || bb.Num > 1 {
+		t.Fatalf("beta wrong: %v", bb)
+	}
 }
 
 func TestMathxDtypes(t *testing.T) {
@@ -1270,39 +1364,69 @@ func TestMathxDtypes(t *testing.T) {
 
 	// dtype
 	d, _ := dtypeFn.Builtin([]environment.Value{environment.NewNumber(1)})
-	if d.Type != environment.StringType || d.Str != "number" { t.Fatalf("dtype scalar wrong: %v", d) }
+	if d.Type != environment.StringType || d.Str != "number" {
+		t.Fatalf("dtype scalar wrong: %v", d)
+	}
 	a, _ := dtypeFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)})})
-	if a.Str != "number" { t.Fatalf("dtype array wrong: %v", a) }
+	if a.Str != "number" {
+		t.Fatalf("dtype array wrong: %v", a)
+	}
 	m, _ := dtypeFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewString("x")})})
-	if m.Str != "mixed" { t.Fatalf("dtype mixed wrong: %v", m) }
+	if m.Str != "mixed" {
+		t.Fatalf("dtype mixed wrong: %v", m)
+	}
 	e, _ := dtypeFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{})})
-	if e.Str != "null" { t.Fatalf("dtype empty array wrong: %v", e) }
+	if e.Str != "null" {
+		t.Fatalf("dtype empty array wrong: %v", e)
+	}
 
 	// astype
 	as1, err := astypeFn.Builtin([]environment.Value{environment.NewString("123.5"), environment.NewString("number")})
-	if err != nil { t.Fatalf("astype scalar error: %v", err) }
-	if as1.Type != environment.NumberType || math.Abs(as1.Num-123.5) > 1e-9 { t.Fatalf("astype scalar -> number wrong: %v", as1) }
+	if err != nil {
+		t.Fatalf("astype scalar error: %v", err)
+	}
+	if as1.Type != environment.NumberType || math.Abs(as1.Num-123.5) > 1e-9 {
+		t.Fatalf("astype scalar -> number wrong: %v", as1)
+	}
 	asArr, err := astypeFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewString("1"), environment.NewNil()}), environment.NewString("boolean")})
-	if err != nil { t.Fatalf("astype array error: %v", err) }
-	if (*asArr.Arr)[0].Type != environment.BooleanType || !(*asArr.Arr)[0].Bool || (*asArr.Arr)[1].Bool { t.Fatalf("astype array->bool wrong: %v", asArr) }
+	if err != nil {
+		t.Fatalf("astype array error: %v", err)
+	}
+	if (*asArr.Arr)[0].Type != environment.BooleanType || !(*asArr.Arr)[0].Bool || (*asArr.Arr)[1].Bool {
+		t.Fatalf("astype array->bool wrong: %v", asArr)
+	}
 
 	// issubdtype / can_cast
 	is1, _ := issubFn.Builtin([]environment.Value{environment.NewNumber(1), environment.NewString("number")})
-	if !is1.IsTruthy() { t.Fatalf("issubdtype value->dtype wrong: %v", is1) }
+	if !is1.IsTruthy() {
+		t.Fatalf("issubdtype value->dtype wrong: %v", is1)
+	}
 	is2, _ := issubFn.Builtin([]environment.Value{environment.NewString("number"), environment.NewString("string")})
-	if is2.IsTruthy() { t.Fatalf("issubdtype dtype->dtype wrong: %v", is2) }
+	if is2.IsTruthy() {
+		t.Fatalf("issubdtype dtype->dtype wrong: %v", is2)
+	}
 	can1, _ := canCastFn.Builtin([]environment.Value{environment.NewString("123.4"), environment.NewString("number")})
-	if !can1.IsTruthy() { t.Fatalf("can_cast string->number should be true: %v", can1) }
+	if !can1.IsTruthy() {
+		t.Fatalf("can_cast string->number should be true: %v", can1)
+	}
 	can2, _ := canCastFn.Builtin([]environment.Value{environment.NewString("abc"), environment.NewString("number")})
-	if can2.IsTruthy() { t.Fatalf("can_cast should be false for 'abc'->number: %v", can2) }
+	if can2.IsTruthy() {
+		t.Fatalf("can_cast should be false for 'abc'->number: %v", can2)
+	}
 
 	// result_type
 	rt, _ := resTypeFn.Builtin([]environment.Value{environment.NewNumber(1), environment.NewString("x")})
-	if rt.Str != "string" { t.Fatalf("result_type wrong: %v", rt) }
+	if rt.Str != "string" {
+		t.Fatalf("result_type wrong: %v", rt)
+	}
 	rt2, _ := resTypeFn.Builtin([]environment.Value{environment.NewNumber(1), environment.NewBool(true)})
-	if rt2.Str != "number" { t.Fatalf("result_type wrong: %v", rt2) }
+	if rt2.Str != "number" {
+		t.Fatalf("result_type wrong: %v", rt2)
+	}
 	rt3, _ := resTypeFn.Builtin([]environment.Value{environment.NewBool(true), environment.NewBool(false)})
-	if rt3.Str != "boolean" { t.Fatalf("result_type wrong: %v", rt3) }
+	if rt3.Str != "boolean" {
+		t.Fatalf("result_type wrong: %v", rt3)
+	}
 }
 
 func TestMathxLinalg(t *testing.T) {
@@ -1329,108 +1453,184 @@ func TestMathxLinalg(t *testing.T) {
 	v1 := environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)})
 	v2 := environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(4)})
 	out, err := dot.Builtin([]environment.Value{v1, v2})
-	if err != nil { t.Fatalf("dot error: %v", err) }
-	if out.Num != 11 { t.Fatalf("dot wrong: %v", out) }
+	if err != nil {
+		t.Fatalf("dot error: %v", err)
+	}
+	if out.Num != 11 {
+		t.Fatalf("dot wrong: %v", out)
+	}
 
 	in, err := inner.Builtin([]environment.Value{v1, v2})
-	if err != nil { t.Fatalf("inner error: %v", err) }
-	if in.Num != 11 { t.Fatalf("inner wrong: %v", in) }
+	if err != nil {
+		t.Fatalf("inner error: %v", err)
+	}
+	if in.Num != 11 {
+		t.Fatalf("inner wrong: %v", in)
+	}
 	vdotRes, err := vdot.Builtin([]environment.Value{v1, v2})
-	if err != nil { t.Fatalf("vdot error: %v", err) }
-	if vdotRes.Num != 11 { t.Fatalf("vdot wrong: %v", vdotRes) }
+	if err != nil {
+		t.Fatalf("vdot error: %v", err)
+	}
+	if vdotRes.Num != 11 {
+		t.Fatalf("vdot wrong: %v", vdotRes)
+	}
 
 	outArr, err := outer.Builtin([]environment.Value{v1, v2})
-	if err != nil { t.Fatalf("outer error: %v", err) }
-	if (*outArr.Arr)[0].Type != environment.ArrayType || (*(*outArr.Arr)[0].Arr)[0].Num != 3 { t.Fatalf("outer wrong: %v", outArr) }
+	if err != nil {
+		t.Fatalf("outer error: %v", err)
+	}
+	if (*outArr.Arr)[0].Type != environment.ArrayType || (*(*outArr.Arr)[0].Arr)[0].Num != 3 {
+		t.Fatalf("outer wrong: %v", outArr)
+	}
 
 	// matrix multiply
-	A := environment.NewArray([]environment.Value{ environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)}), environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(4)}) })
-	B := environment.NewArray([]environment.Value{ environment.NewArray([]environment.Value{environment.NewNumber(5), environment.NewNumber(6)}), environment.NewArray([]environment.Value{environment.NewNumber(7), environment.NewNumber(8)}) })
+	A := environment.NewArray([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)}), environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(4)})})
+	B := environment.NewArray([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(5), environment.NewNumber(6)}), environment.NewArray([]environment.Value{environment.NewNumber(7), environment.NewNumber(8)})})
 	mres, err := matmul.Builtin([]environment.Value{A, B})
-	if err != nil { t.Fatalf("matmul error: %v", err) }
-	if (*mres.Arr)[0].Type != environment.ArrayType || (*(*mres.Arr)[0].Arr)[0].Num != 19 { t.Fatalf("matmul wrong: %v", mres) }
+	if err != nil {
+		t.Fatalf("matmul error: %v", err)
+	}
+	if (*mres.Arr)[0].Type != environment.ArrayType || (*(*mres.Arr)[0].Arr)[0].Num != 19 {
+		t.Fatalf("matmul wrong: %v", mres)
+	}
 
 	// tensordot == matmul for 2D
 	td, err := tens.Builtin([]environment.Value{A, B})
-	if err != nil { t.Fatalf("tensordot error: %v", err) }
-	if (*td.Arr)[0].Type != environment.ArrayType || (*(*td.Arr)[0].Arr)[0].Num != 19 { t.Fatalf("tensordot wrong: %v", td) }
+	if err != nil {
+		t.Fatalf("tensordot error: %v", err)
+	}
+	if (*td.Arr)[0].Type != environment.ArrayType || (*(*td.Arr)[0].Arr)[0].Num != 19 {
+		t.Fatalf("tensordot wrong: %v", td)
+	}
 
 	// trace
 	tr, err := trace.Builtin([]environment.Value{A})
-	if err != nil { t.Fatalf("trace error: %v", err) }
-	if tr.Num != 5 { t.Fatalf("trace wrong: %v", tr) }
+	if err != nil {
+		t.Fatalf("trace error: %v", err)
+	}
+	if tr.Num != 5 {
+		t.Fatalf("trace wrong: %v", tr)
+	}
 
 	// norm
 	nn, _ := norm.Builtin([]environment.Value{v1})
-	if math.Abs(nn.Num-math.Sqrt(5)) > 1e-9 { t.Fatalf("norm wrong: %v", nn) }
+	if math.Abs(nn.Num-math.Sqrt(5)) > 1e-9 {
+		t.Fatalf("norm wrong: %v", nn)
+	}
 
 	// det / inv
-	m := environment.NewArray([]environment.Value{ environment.NewArray([]environment.Value{environment.NewNumber(4), environment.NewNumber(7)}), environment.NewArray([]environment.Value{environment.NewNumber(2), environment.NewNumber(6)}) })
+	m := environment.NewArray([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(4), environment.NewNumber(7)}), environment.NewArray([]environment.Value{environment.NewNumber(2), environment.NewNumber(6)})})
 	dv, err := detFn.Builtin([]environment.Value{m})
-	if err != nil { t.Fatalf("det error: %v", err) }
-	if math.Abs(dv.Num-10) > 1e-9 { t.Fatalf("det wrong: %v", dv) }
+	if err != nil {
+		t.Fatalf("det error: %v", err)
+	}
+	if math.Abs(dv.Num-10) > 1e-9 {
+		t.Fatalf("det wrong: %v", dv)
+	}
 	invv, err := invFn.Builtin([]environment.Value{m})
-	if err != nil { t.Fatalf("inv error: %v", err) }
+	if err != nil {
+		t.Fatalf("inv error: %v", err)
+	}
 	// check inv * m = I
 	prod, err := matmul.Builtin([]environment.Value{invv, m})
-	if err != nil { t.Fatalf("inv* m error: %v", err) }
-	if (*prod.Arr)[0].Type != environment.ArrayType || math.Abs(((*(*prod.Arr)[0].Arr)[0].Num)-1.0) > 1e-9 { t.Fatalf("inv check failed: %v", prod) }
+	if err != nil {
+		t.Fatalf("inv* m error: %v", err)
+	}
+	if (*prod.Arr)[0].Type != environment.ArrayType || math.Abs(((*(*prod.Arr)[0].Arr)[0].Num)-1.0) > 1e-9 {
+		t.Fatalf("inv check failed: %v", prod)
+	}
 
 	// pinv (fallback to inv for square)
 	_, err = pinv.Builtin([]environment.Value{m})
-	if err != nil { t.Fatalf("pinv error: %v", err) }
+	if err != nil {
+		t.Fatalf("pinv error: %v", err)
+	}
 
 	// solve
-	A2 := environment.NewArray([]environment.Value{ environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(1)}), environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)}) })
+	A2 := environment.NewArray([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(1)}), environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)})})
 	bvec := environment.NewArray([]environment.Value{environment.NewNumber(9), environment.NewNumber(8)})
 	xres, err := solveFn.Builtin([]environment.Value{A2, bvec})
-	if err != nil { t.Fatalf("solve error: %v", err) }
-	if (*xres.Arr)[0].Num != 2 || (*xres.Arr)[1].Num != 3 { t.Fatalf("solve wrong: %v", xres) }
+	if err != nil {
+		t.Fatalf("solve error: %v", err)
+	}
+	if (*xres.Arr)[0].Num != 2 || (*xres.Arr)[1].Num != 3 {
+		t.Fatalf("solve wrong: %v", xres)
+	}
 
 	// eig / eigvals for diagonal
-	D := environment.NewArray([]environment.Value{ environment.NewArray([]environment.Value{environment.NewNumber(2), environment.NewNumber(0)}), environment.NewArray([]environment.Value{environment.NewNumber(0), environment.NewNumber(3)}) })
+	D := environment.NewArray([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(2), environment.NewNumber(0)}), environment.NewArray([]environment.Value{environment.NewNumber(0), environment.NewNumber(3)})})
 	evs, err := eigvalsFn.Builtin([]environment.Value{D})
-	if err != nil { t.Fatalf("eigvals error: %v", err) }
+	if err != nil {
+		t.Fatalf("eigvals error: %v", err)
+	}
 	numSliceEquals(t, *evs.Arr, []float64{(3), (2)})
 	eigRes, err := eigFn.Builtin([]environment.Value{D})
-	if err != nil { t.Fatalf("eig error: %v", err) }
+	if err != nil {
+		t.Fatalf("eig error: %v", err)
+	}
 	// eig returns [vals, vecs]
-	if eigRes.Type != environment.ArrayType || len(*eigRes.Arr) != 2 { t.Fatalf("eig wrong: %v", eigRes) }
+	if eigRes.Type != environment.ArrayType || len(*eigRes.Arr) != 2 {
+		t.Fatalf("eig wrong: %v", eigRes)
+	}
 
 	// svd for diag
 	Sres, err := svdFn.Builtin([]environment.Value{D})
-	if err != nil { t.Fatalf("svd error: %v", err) }
+	if err != nil {
+		t.Fatalf("svd error: %v", err)
+	}
 	// Sres = [U, S, V]
-	if Sres.Type != environment.ArrayType || len(*Sres.Arr) != 3 { t.Fatalf("svd wrong shape: %v", Sres) }
+	if Sres.Type != environment.ArrayType || len(*Sres.Arr) != 3 {
+		t.Fatalf("svd wrong shape: %v", Sres)
+	}
 	// singular values should include 3 and 2
 	Svals := (*(*Sres.Arr)[1].Arr)
-	if Svals[0].Num < Svals[1].Num { t.Fatalf("svd singulars order wrong: %v", Svals) }
+	if Svals[0].Num < Svals[1].Num {
+		t.Fatalf("svd singulars order wrong: %v", Svals)
+	}
 
 	// qr (check Q*R ~= A)
 	QRres, err := qrFn.Builtin([]environment.Value{A})
-	if err != nil { t.Fatalf("qr error: %v", err) }
-	if QRres.Type != environment.ArrayType || len(*QRres.Arr) != 2 { t.Fatalf("qr wrong: %v", QRres) }
+	if err != nil {
+		t.Fatalf("qr error: %v", err)
+	}
+	if QRres.Type != environment.ArrayType || len(*QRres.Arr) != 2 {
+		t.Fatalf("qr wrong: %v", QRres)
+	}
 	Qm := (*QRres.Arr)[0]
 	Rm := (*QRres.Arr)[1]
 	recon, err := matmul.Builtin([]environment.Value{Qm, Rm})
-	if err != nil { t.Fatalf("qr recon error: %v", err) }
-	if (*recon.Arr)[0].Type != environment.ArrayType || math.Abs(((*(*recon.Arr)[0].Arr)[0].Num)-1.0) > 1e-9 { t.Fatalf("qr recon wrong: %v", recon) }
+	if err != nil {
+		t.Fatalf("qr recon error: %v", err)
+	}
+	if (*recon.Arr)[0].Type != environment.ArrayType || math.Abs(((*(*recon.Arr)[0].Arr)[0].Num)-1.0) > 1e-9 {
+		t.Fatalf("qr recon wrong: %v", recon)
+	}
 
 	// cholesky
-	spd := environment.NewArray([]environment.Value{ environment.NewArray([]environment.Value{environment.NewNumber(4), environment.NewNumber(2)}), environment.NewArray([]environment.Value{environment.NewNumber(2), environment.NewNumber(3)}) })
+	spd := environment.NewArray([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(4), environment.NewNumber(2)}), environment.NewArray([]environment.Value{environment.NewNumber(2), environment.NewNumber(3)})})
 	Lres, err := choleskyFn.Builtin([]environment.Value{spd})
-	if err != nil { t.Fatalf("cholesky error: %v", err) }
+	if err != nil {
+		t.Fatalf("cholesky error: %v", err)
+	}
 	// check L * L^T == spd
 	Lt := registry["mathx"].Entries["transpose"].Builtin
 	Ltres, _ := Lt([]environment.Value{Lres})
 	LLt, err := matmul.Builtin([]environment.Value{Lres, Ltres})
-	if err != nil { t.Fatalf("cholesky recon error: %v", err) }
-	if (*LLt.Arr)[0].Type != environment.ArrayType || math.Abs(((*(*LLt.Arr)[0].Arr)[0].Num)-4.0) > 1e-9 { t.Fatalf("cholesky recon wrong: %v", LLt) }
+	if err != nil {
+		t.Fatalf("cholesky recon error: %v", err)
+	}
+	if (*LLt.Arr)[0].Type != environment.ArrayType || math.Abs(((*(*LLt.Arr)[0].Arr)[0].Num)-4.0) > 1e-9 {
+		t.Fatalf("cholesky recon wrong: %v", LLt)
+	}
 
 	// matrix_rank
-	rk, err := rankFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{ environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)}), environment.NewArray([]environment.Value{environment.NewNumber(2), environment.NewNumber(4)}) })})
-	if err != nil { t.Fatalf("rank error: %v", err) }
-	if rk.Num != 1 { t.Fatalf("rank wrong: %v", rk) }
+	rk, err := rankFn.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)}), environment.NewArray([]environment.Value{environment.NewNumber(2), environment.NewNumber(4)})})})
+	if err != nil {
+		t.Fatalf("rank error: %v", err)
+	}
+	if rk.Num != 1 {
+		t.Fatalf("rank wrong: %v", rk)
+	}
 }
 
 func TestMathxFFT(t *testing.T) {
@@ -1446,64 +1646,102 @@ func TestMathxFFT(t *testing.T) {
 	// simple 1D FFT: delta at 0 -> all ones
 	a := environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(0), environment.NewNumber(0), environment.NewNumber(0)})
 	X, err := fftFn.Builtin([]environment.Value{a})
-	if err != nil { t.Fatalf("fft error: %v", err) }
-	if X.Type != environment.ArrayType || len(*X.Arr) != 4 { t.Fatalf("fft wrong shape: %v", X) }
+	if err != nil {
+		t.Fatalf("fft error: %v", err)
+	}
+	if X.Type != environment.ArrayType || len(*X.Arr) != 4 {
+		t.Fatalf("fft wrong shape: %v", X)
+	}
 	for i := 0; i < 4; i++ {
 		pt := (*X.Arr)[i]
-		if pt.Type != environment.ArrayType || len(*pt.Arr) != 2 { t.Fatalf("fft element not complex pair: %v", pt) }
+		if pt.Type != environment.ArrayType || len(*pt.Arr) != 2 {
+			t.Fatalf("fft element not complex pair: %v", pt)
+		}
 		r := (*pt.Arr)[0].Num
 		im := (*pt.Arr)[1].Num
-		if math.Abs(r-1.0) > 1e-9 || math.Abs(im) > 1e-9 { t.Fatalf("fft delta wrong at %d: %v", i, pt) }
+		if math.Abs(r-1.0) > 1e-9 || math.Abs(im) > 1e-9 {
+			t.Fatalf("fft delta wrong at %d: %v", i, pt)
+		}
 	}
 
 	// fft of [0,1,0,0] -> [1, -i, -1, i]
 	b := environment.NewArray([]environment.Value{environment.NewNumber(0), environment.NewNumber(1), environment.NewNumber(0), environment.NewNumber(0)})
 	Y, err := fftFn.Builtin([]environment.Value{b})
-	if err != nil { t.Fatalf("fft error: %v", err) }
+	if err != nil {
+		t.Fatalf("fft error: %v", err)
+	}
 	e0 := (*(*Y.Arr)[0].Arr)[0].Num
 	e1im := (*(*Y.Arr)[1].Arr)[1].Num
-	if math.Abs(e0-1.0) > 1e-9 || math.Abs(e1im+1.0) > 1e-9 { t.Fatalf("fft expected complex phasors wrong: %v", Y) }
+	if math.Abs(e0-1.0) > 1e-9 || math.Abs(e1im+1.0) > 1e-9 {
+		t.Fatalf("fft expected complex phasors wrong: %v", Y)
+	}
 
 	// ifft(fft(x)) -> x (real parts)
 	orig := environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2), environment.NewNumber(3), environment.NewNumber(4)})
 	F, err := fftFn.Builtin([]environment.Value{orig})
-	if err != nil { t.Fatalf("fft error: %v", err) }
+	if err != nil {
+		t.Fatalf("fft error: %v", err)
+	}
 	I, err := ifftFn.Builtin([]environment.Value{F})
-	if err != nil { t.Fatalf("ifft error: %v", err) }
+	if err != nil {
+		t.Fatalf("ifft error: %v", err)
+	}
 	for i := 0; i < 4; i++ {
 		val := (*(*I.Arr)[i].Arr)[0].Num
-		if math.Abs(val-float64(i+1)) > 1e-9 { t.Fatalf("ifft recon wrong at %d: %v", i, I) }
+		if math.Abs(val-float64(i+1)) > 1e-9 {
+			t.Fatalf("ifft recon wrong at %d: %v", i, I)
+		}
 	}
 
 	// rfft/irfft round-trip
 	rr, err := rfftFn.Builtin([]environment.Value{orig})
-	if err != nil { t.Fatalf("rfft error: %v", err) }
+	if err != nil {
+		t.Fatalf("rfft error: %v", err)
+	}
 	ir, err := irfftFn.Builtin([]environment.Value{rr})
-	if err != nil { t.Fatalf("irfft error: %v", err) }
+	if err != nil {
+		t.Fatalf("irfft error: %v", err)
+	}
 	for i := 0; i < 4; i++ {
-		if math.Abs((*ir.Arr)[i].Num - float64(i+1)) > 1e-9 { t.Fatalf("irfft recon wrong at %d: %v", i, ir) }
+		if math.Abs((*ir.Arr)[i].Num-float64(i+1)) > 1e-9 {
+			t.Fatalf("irfft recon wrong at %d: %v", i, ir)
+		}
 	}
 
 	// fftshift / ifftshift
 	seq := environment.NewArray([]environment.Value{environment.NewNumber(0), environment.NewNumber(1), environment.NewNumber(2), environment.NewNumber(3)})
 	sh, err := fftshiftFn.Builtin([]environment.Value{seq})
-	if err != nil { t.Fatalf("fftshift error: %v", err) }
-	if (*sh.Arr)[0].Num != 2 || (*sh.Arr)[1].Num != 3 || (*sh.Arr)[2].Num != 0 || (*sh.Arr)[3].Num != 1 { t.Fatalf("fftshift wrong: %v", sh) }
+	if err != nil {
+		t.Fatalf("fftshift error: %v", err)
+	}
+	if (*sh.Arr)[0].Num != 2 || (*sh.Arr)[1].Num != 3 || (*sh.Arr)[2].Num != 0 || (*sh.Arr)[3].Num != 1 {
+		t.Fatalf("fftshift wrong: %v", sh)
+	}
 	unsh, err := ifftshiftFn.Builtin([]environment.Value{sh})
-	if err != nil { t.Fatalf("ifftshift error: %v", err) }
-	if (*unsh.Arr)[0].Num != 0 || (*unsh.Arr)[1].Num != 1 || (*unsh.Arr)[2].Num != 2 || (*unsh.Arr)[3].Num != 3 { t.Fatalf("ifftshift wrong: %v", unsh) }
+	if err != nil {
+		t.Fatalf("ifftshift error: %v", err)
+	}
+	if (*unsh.Arr)[0].Num != 0 || (*unsh.Arr)[1].Num != 1 || (*unsh.Arr)[2].Num != 2 || (*unsh.Arr)[3].Num != 3 {
+		t.Fatalf("ifftshift wrong: %v", unsh)
+	}
 
 	// 2D fft/ifft roundtrip
-	mat := environment.NewArray([]environment.Value{ environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(0)}), environment.NewArray([]environment.Value{environment.NewNumber(0), environment.NewNumber(0)}) })
+	mat := environment.NewArray([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(0)}), environment.NewArray([]environment.Value{environment.NewNumber(0), environment.NewNumber(0)})})
 	FM, err := fft2Fn.Builtin([]environment.Value{mat})
-	if err != nil { t.Fatalf("fft2 error: %v", err) }
+	if err != nil {
+		t.Fatalf("fft2 error: %v", err)
+	}
 	IM, err := ifft2Fn.Builtin([]environment.Value{FM})
-	if err != nil { t.Fatalf("ifft2 error: %v", err) }
+	if err != nil {
+		t.Fatalf("ifft2 error: %v", err)
+	}
 	// extract real parts and compare
 	r00 := (*(*(*IM.Arr)[0].Arr)[0].Arr)[0].Num
 	r01 := (*(*(*IM.Arr)[0].Arr)[1].Arr)[0].Num
 	r10 := (*(*(*IM.Arr)[1].Arr)[0].Arr)[0].Num
-	if math.Abs(r00-1.0) > 1e-9 || math.Abs(r01-0.0) > 1e-9 || math.Abs(r10-0.0) > 1e-9 { t.Fatalf("ifft2 recon wrong: %v", IM) }
+	if math.Abs(r00-1.0) > 1e-9 || math.Abs(r01-0.0) > 1e-9 || math.Abs(r10-0.0) > 1e-9 {
+		t.Fatalf("ifft2 recon wrong: %v", IM)
+	}
 }
 
 func TestMathxIO(t *testing.T) {
@@ -1519,46 +1757,78 @@ func TestMathxIO(t *testing.T) {
 	// save/load (JSON roundtrip)
 	tmp := t.TempDir() + "/arr.json"
 	arr := environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2), environment.NewNumber(3)})
-	if _, err := saveFn.Builtin([]environment.Value{environment.NewString(tmp), arr}); err != nil { t.Fatalf("save error: %v", err) }
+	if _, err := saveFn.Builtin([]environment.Value{environment.NewString(tmp), arr}); err != nil {
+		t.Fatalf("save error: %v", err)
+	}
 	l, err := loadFn.Builtin([]environment.Value{environment.NewString(tmp)})
-	if err != nil { t.Fatalf("load error: %v", err) }
-	if l.Type != environment.ArrayType || len(*l.Arr) != 3 { t.Fatalf("load returned wrong type: %v", l) }
-	if (*l.Arr)[1].Num != 2 { t.Fatalf("load value mismatch: %v", l) }
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if l.Type != environment.ArrayType || len(*l.Arr) != 3 {
+		t.Fatalf("load returned wrong type: %v", l)
+	}
+	if (*l.Arr)[1].Num != 2 {
+		t.Fatalf("load value mismatch: %v", l)
+	}
 
 	// savez + load (object)
 	tmp2 := t.TempDir() + "/multi.json"
 	obj := environment.NewObject(map[string]environment.Value{"a": environment.NewArray([]environment.Value{environment.NewNumber(1)}), "b": environment.NewNumber(5)}, []string{"a", "b"})
-	if _, err := savezFn.Builtin([]environment.Value{environment.NewString(tmp2), obj}); err != nil { t.Fatalf("savez error: %v", err) }
+	if _, err := savezFn.Builtin([]environment.Value{environment.NewString(tmp2), obj}); err != nil {
+		t.Fatalf("savez error: %v", err)
+	}
 	lo, err := loadFn.Builtin([]environment.Value{environment.NewString(tmp2)})
-	if err != nil { t.Fatalf("load error: %v", err) }
-	if lo.Type != environment.ObjectType { t.Fatalf("savez/load returned wrong type: %v", lo) }
-	if val, ok := lo.Obj.Entries["b"]; !ok || val.Num != 5 { t.Fatalf("savez content wrong: %v", lo) }
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if lo.Type != environment.ObjectType {
+		t.Fatalf("savez/load returned wrong type: %v", lo)
+	}
+	if val, ok := lo.Obj.Entries["b"]; !ok || val.Num != 5 {
+		t.Fatalf("savez content wrong: %v", lo)
+	}
 
 	// savetxt/loadtxt roundtrip (2D and 1D)
 	tcsv := t.TempDir() + "/t.csv"
-	mat := environment.NewArray([]environment.Value{ environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)}), environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(4)}) })
-	if _, err := savetxtFn.Builtin([]environment.Value{environment.NewString(tcsv), mat}); err != nil { t.Fatalf("savetxt error: %v", err) }
+	mat := environment.NewArray([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)}), environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(4)})})
+	if _, err := savetxtFn.Builtin([]environment.Value{environment.NewString(tcsv), mat}); err != nil {
+		t.Fatalf("savetxt error: %v", err)
+	}
 	lt, err := loadtxtFn.Builtin([]environment.Value{environment.NewString(tcsv)})
-	if err != nil { t.Fatalf("loadtxt error: %v", err) }
-	if (*(*lt.Arr)[0].Arr)[1].Num != 2 { t.Fatalf("loadtxt wrong: %v", lt) }
+	if err != nil {
+		t.Fatalf("loadtxt error: %v", err)
+	}
+	if (*(*lt.Arr)[0].Arr)[1].Num != 2 {
+		t.Fatalf("loadtxt wrong: %v", lt)
+	}
 
 	// genfromtxt: missing and comments
 	txt := t.TempDir() + "/g.txt"
 	os.WriteFile(txt, []byte("# header\n1 2\n3  \n4 5"), 0644)
 	gf, err := genfromtxtFn.Builtin([]environment.Value{environment.NewString(txt)})
-	if err != nil { t.Fatalf("genfromtxt error: %v", err) }
+	if err != nil {
+		t.Fatalf("genfromtxt error: %v", err)
+	}
 	// second row has a missing second column -> should be Array with Nil or single number depending on parsing
 	if (*gf.Arr)[1].Type == environment.ArrayType {
-		if (*(*gf.Arr)[1].Arr)[1].Type != environment.NilType { t.Fatalf("genfromtxt missing value not nil: %v", gf) }
+		if (*(*gf.Arr)[1].Arr)[1].Type != environment.NilType {
+			t.Fatalf("genfromtxt missing value not nil: %v", gf)
+		}
 	}
 
 	// tofile/fromfile (binary float64)
 	bf := t.TempDir() + "/bin.dat"
 	nums := environment.NewArray([]environment.Value{environment.NewNumber(1.5), environment.NewNumber(2.5), environment.NewNumber(3.5)})
-	if _, err := tofileFn.Builtin([]environment.Value{environment.NewString(bf), nums}); err != nil { t.Fatalf("tofile error: %v", err) }
+	if _, err := tofileFn.Builtin([]environment.Value{environment.NewString(bf), nums}); err != nil {
+		t.Fatalf("tofile error: %v", err)
+	}
 	rf, err := fromfileFn.Builtin([]environment.Value{environment.NewString(bf)})
-	if err != nil { t.Fatalf("fromfile error: %v", err) }
-	if (*rf.Arr)[2].Num != 3.5 { t.Fatalf("fromfile wrong: %v", rf) }
+	if err != nil {
+		t.Fatalf("fromfile error: %v", err)
+	}
+	if (*rf.Arr)[2].Num != 3.5 {
+		t.Fatalf("fromfile wrong: %v", rf)
+	}
 }
 
 func TestMathxPoly(t *testing.T) {
@@ -1573,48 +1843,74 @@ func TestMathxPoly(t *testing.T) {
 	// polyval scalar
 	p := environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2), environment.NewNumber(3)}) // x^2+2x+3
 	v, err := polyval.Builtin([]environment.Value{p, environment.NewNumber(2)})
-	if err != nil { t.Fatalf("polyval error: %v", err) }
-	if v.Type != environment.NumberType || v.Num != 11 { t.Fatalf("polyval scalar wrong: %v", v) }
+	if err != nil {
+		t.Fatalf("polyval error: %v", err)
+	}
+	if v.Type != environment.NumberType || v.Num != 11 {
+		t.Fatalf("polyval scalar wrong: %v", v)
+	}
 
 	// polyval array
 	xs := environment.NewArray([]environment.Value{environment.NewNumber(0), environment.NewNumber(1), environment.NewNumber(2)})
 	vals, err := polyval.Builtin([]environment.Value{p, xs})
-	if err != nil { t.Fatalf("polyval error: %v", err) }
-	if (*vals.Arr)[0].Num != 3 || (*vals.Arr)[1].Num != 6 || (*vals.Arr)[2].Num != 11 { t.Fatalf("polyval array wrong: %v", vals) }
+	if err != nil {
+		t.Fatalf("polyval error: %v", err)
+	}
+	if (*vals.Arr)[0].Num != 3 || (*vals.Arr)[1].Num != 6 || (*vals.Arr)[2].Num != 11 {
+		t.Fatalf("polyval array wrong: %v", vals)
+	}
 
 	// polyadd / polysub
 	a := environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2), environment.NewNumber(3)})
 	b := environment.NewArray([]environment.Value{environment.NewNumber(4), environment.NewNumber(5)})
 	pa, _ := polyadd.Builtin([]environment.Value{a, b})
-	if (*pa.Arr)[0].Num != 1 || (*pa.Arr)[1].Num != 6 || (*pa.Arr)[2].Num != 8 { t.Fatalf("polyadd wrong: %v", pa) }
+	if (*pa.Arr)[0].Num != 1 || (*pa.Arr)[1].Num != 6 || (*pa.Arr)[2].Num != 8 {
+		t.Fatalf("polyadd wrong: %v", pa)
+	}
 	ps, _ := polysub.Builtin([]environment.Value{a, b})
-	if (*ps.Arr)[0].Num != 1 || (*ps.Arr)[1].Num != -2 || (*ps.Arr)[2].Num != -2 { t.Fatalf("polysub wrong: %v", ps) }
+	if (*ps.Arr)[0].Num != 1 || (*ps.Arr)[1].Num != -2 || (*ps.Arr)[2].Num != -2 {
+		t.Fatalf("polysub wrong: %v", ps)
+	}
 
 	// polymul
 	mres, _ := polymul.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(1)}), environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(1)})})
-	if (*mres.Arr)[0].Num != 1 || (*mres.Arr)[1].Num != 2 || (*mres.Arr)[2].Num != 1 { t.Fatalf("polymul simple wrong: %v", mres) }
+	if (*mres.Arr)[0].Num != 1 || (*mres.Arr)[1].Num != 2 || (*mres.Arr)[2].Num != 1 {
+		t.Fatalf("polymul simple wrong: %v", mres)
+	}
 
 	// polyder
 	d := environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(2), environment.NewNumber(1)}) // 3x^2+2x+1
 	dres, _ := polyder.Builtin([]environment.Value{d})
-	if (*dres.Arr)[0].Num != 6 || (*dres.Arr)[1].Num != 2 { t.Fatalf("polyder wrong: %v", dres) }
+	if (*dres.Arr)[0].Num != 6 || (*dres.Arr)[1].Num != 2 {
+		t.Fatalf("polyder wrong: %v", dres)
+	}
 	// derivative of constant
 	cder, _ := polyder.Builtin([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(5)})})
-	if (*cder.Arr)[0].Num != 0 { t.Fatalf("polyder const wrong: %v", cder) }
+	if (*cder.Arr)[0].Num != 0 {
+		t.Fatalf("polyder const wrong: %v", cder)
+	}
 
 	// polyint
 	intRes, _ := polyint.Builtin([]environment.Value{d})
 	// integral of 3x^2+2x+1 is x^3 + x^2 + x + C -> coefficients [1,1,1,C]
-	if len(*intRes.Arr) != 4 || (*intRes.Arr)[0].Num != 1 || (*intRes.Arr)[1].Num != 1 || (*intRes.Arr)[2].Num != 1 || (*intRes.Arr)[3].Num != 0 { t.Fatalf("polyint wrong: %v", intRes) }
+	if len(*intRes.Arr) != 4 || (*intRes.Arr)[0].Num != 1 || (*intRes.Arr)[1].Num != 1 || (*intRes.Arr)[2].Num != 1 || (*intRes.Arr)[3].Num != 0 {
+		t.Fatalf("polyint wrong: %v", intRes)
+	}
 	intRes2, _ := polyint.Builtin([]environment.Value{d, environment.NewNumber(7)})
-	if (*intRes2.Arr)[3].Num != 7 { t.Fatalf("polyint constant wrong: %v", intRes2) }
+	if (*intRes2.Arr)[3].Num != 7 {
+		t.Fatalf("polyint constant wrong: %v", intRes2)
+	}
 
 	// polyfit (fit quadratic to points -> [1,2,3])
 	x := environment.NewArray([]environment.Value{environment.NewNumber(0), environment.NewNumber(1), environment.NewNumber(2)})
 	y := environment.NewArray([]environment.Value{environment.NewNumber(3), environment.NewNumber(6), environment.NewNumber(11)})
 	fit, err := polyfit.Builtin([]environment.Value{x, y, environment.NewNumber(2)})
-	if err != nil { t.Fatalf("polyfit error: %v", err) }
-	if math.Abs((*fit.Arr)[0].Num-1.0) > 1e-9 || math.Abs((*fit.Arr)[1].Num-2.0) > 1e-9 || math.Abs((*fit.Arr)[2].Num-3.0) > 1e-9 { t.Fatalf("polyfit wrong: %v", fit) }
+	if err != nil {
+		t.Fatalf("polyfit error: %v", err)
+	}
+	if math.Abs((*fit.Arr)[0].Num-1.0) > 1e-9 || math.Abs((*fit.Arr)[1].Num-2.0) > 1e-9 || math.Abs((*fit.Arr)[2].Num-3.0) > 1e-9 {
+		t.Fatalf("polyfit wrong: %v", fit)
+	}
 }
 
 func TestMathxUtils(t *testing.T) {
@@ -1627,49 +1923,87 @@ func TestMathxUtils(t *testing.T) {
 	setPo := getBuiltin(t, "set_printoptions")
 
 	// ndim
-	if v, _ := ndimFn.Builtin([]environment.Value{environment.NewNumber(1)}); v.Num != 0 { t.Fatalf("ndim scalar wrong: %v", v) }
+	if v, _ := ndimFn.Builtin([]environment.Value{environment.NewNumber(1)}); v.Num != 0 {
+		t.Fatalf("ndim scalar wrong: %v", v)
+	}
 	a := environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)})
-	if v, _ := ndimFn.Builtin([]environment.Value{a}); v.Num != 1 { t.Fatalf("ndim 1D wrong: %v", v) }
-	m := environment.NewArray([]environment.Value{ environment.NewArray([]environment.Value{environment.NewNumber(1)}), environment.NewArray([]environment.Value{environment.NewNumber(2)}) })
-	if v, _ := ndimFn.Builtin([]environment.Value{m}); v.Num != 2 { t.Fatalf("ndim 2D wrong: %v", v) }
+	if v, _ := ndimFn.Builtin([]environment.Value{a}); v.Num != 1 {
+		t.Fatalf("ndim 1D wrong: %v", v)
+	}
+	m := environment.NewArray([]environment.Value{environment.NewArray([]environment.Value{environment.NewNumber(1)}), environment.NewArray([]environment.Value{environment.NewNumber(2)})})
+	if v, _ := ndimFn.Builtin([]environment.Value{m}); v.Num != 2 {
+		t.Fatalf("ndim 2D wrong: %v", v)
+	}
 
 	// size
-	if v, _ := sizeFn.Builtin([]environment.Value{environment.NewNumber(1)}); v.Num != 1 { t.Fatalf("size scalar wrong: %v", v) }
-	if v, _ := sizeFn.Builtin([]environment.Value{a}); v.Num != 2 { t.Fatalf("size 1D wrong: %v", v) }
-	if v, _ := sizeFn.Builtin([]environment.Value{m}); v.Num != 2 { t.Fatalf("size 2D wrong: %v", v) }
+	if v, _ := sizeFn.Builtin([]environment.Value{environment.NewNumber(1)}); v.Num != 1 {
+		t.Fatalf("size scalar wrong: %v", v)
+	}
+	if v, _ := sizeFn.Builtin([]environment.Value{a}); v.Num != 2 {
+		t.Fatalf("size 1D wrong: %v", v)
+	}
+	if v, _ := sizeFn.Builtin([]environment.Value{m}); v.Num != 2 {
+		t.Fatalf("size 2D wrong: %v", v)
+	}
 
 	// itemsize
-	if v, _ := itemsizeFn.Builtin([]environment.Value{environment.NewNumber(1.23)}); v.Num != 8 { t.Fatalf("itemsize number wrong: %v", v) }
-	if v, _ := itemsizeFn.Builtin([]environment.Value{environment.NewString("abc")}); v.Num != 3 { t.Fatalf("itemsize string wrong: %v", v) }
-	if v, _ := itemsizeFn.Builtin([]environment.Value{a}); v.Num != 8 { t.Fatalf("itemsize array->number wrong: %v", v) }
+	if v, _ := itemsizeFn.Builtin([]environment.Value{environment.NewNumber(1.23)}); v.Num != 8 {
+		t.Fatalf("itemsize number wrong: %v", v)
+	}
+	if v, _ := itemsizeFn.Builtin([]environment.Value{environment.NewString("abc")}); v.Num != 3 {
+		t.Fatalf("itemsize string wrong: %v", v)
+	}
+	if v, _ := itemsizeFn.Builtin([]environment.Value{a}); v.Num != 8 {
+		t.Fatalf("itemsize array->number wrong: %v", v)
+	}
 
 	// copyto (array<-array)
 	d := environment.NewArray([]environment.Value{environment.NewNumber(0), environment.NewNumber(0), environment.NewNumber(0)})
 	src := environment.NewArray([]environment.Value{environment.NewNumber(7), environment.NewNumber(8), environment.NewNumber(9)})
-	if _, err := copytoFn.Builtin([]environment.Value{d, src}); err != nil { t.Fatalf("copyto error: %v", err) }
-	if (*d.Arr)[0].Num != 7 || (*d.Arr)[2].Num != 9 { t.Fatalf("copyto not copied: %v", d) }
+	if _, err := copytoFn.Builtin([]environment.Value{d, src}); err != nil {
+		t.Fatalf("copyto error: %v", err)
+	}
+	if (*d.Arr)[0].Num != 7 || (*d.Arr)[2].Num != 9 {
+		t.Fatalf("copyto not copied: %v", d)
+	}
 	// copyto (array<-scalar)
 	d2 := environment.NewArray([]environment.Value{environment.NewNumber(0), environment.NewNumber(0)})
-	if _, err := copytoFn.Builtin([]environment.Value{d2, environment.NewNumber(5)}); err != nil { t.Fatalf("copyto scalar error: %v", err) }
-	if (*d2.Arr)[0].Num != 5 || (*d2.Arr)[1].Num != 5 { t.Fatalf("copyto scalar wrong: %v", d2) }
+	if _, err := copytoFn.Builtin([]environment.Value{d2, environment.NewNumber(5)}); err != nil {
+		t.Fatalf("copyto scalar error: %v", err)
+	}
+	if (*d2.Arr)[0].Num != 5 || (*d2.Arr)[1].Num != 5 {
+		t.Fatalf("copyto scalar wrong: %v", d2)
+	}
 	// copyto mismatch -> error
-	if _, err := copytoFn.Builtin([]environment.Value{d, environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)})}); err == nil { t.Fatalf("copyto should error on size mismatch") }
+	if _, err := copytoFn.Builtin([]environment.Value{d, environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)})}); err == nil {
+		t.Fatalf("copyto should error on size mismatch")
+	}
 
 	// view -> shared backing
 	aorig := environment.NewArray([]environment.Value{environment.NewNumber(1), environment.NewNumber(2)})
 	vwr, err := viewFn.Builtin([]environment.Value{aorig})
-	if err != nil { t.Fatalf("view error: %v", err) }
+	if err != nil {
+		t.Fatalf("view error: %v", err)
+	}
 	// mutate view and check original
 	(*vwr.Arr)[0] = environment.NewNumber(99)
-	if (*aorig.Arr)[0].Num != 99 { t.Fatalf("view not shared backing: %v", aorig) }
+	if (*aorig.Arr)[0].Num != 99 {
+		t.Fatalf("view not shared backing: %v", aorig)
+	}
 
 	// printoptions
 	po, _ := getPo.Builtin([]environment.Value{})
-	if po.Type != environment.ObjectType { t.Fatalf("get_printoptions wrong type: %v", po) }
+	if po.Type != environment.ObjectType {
+		t.Fatalf("get_printoptions wrong type: %v", po)
+	}
 	prec := po.Obj.Entries["precision"].Num
-	if prec != 6 { t.Fatalf("default precision wrong: %v", prec) }
+	if prec != 6 {
+		t.Fatalf("default precision wrong: %v", prec)
+	}
 	// set options
-	_, _ = setPo.Builtin([]environment.Value{ environment.NewObject(map[string]environment.Value{"precision": environment.NewNumber(3), "linewidth": environment.NewNumber(40)}, []string{"precision","linewidth"}) })
+	_, _ = setPo.Builtin([]environment.Value{environment.NewObject(map[string]environment.Value{"precision": environment.NewNumber(3), "linewidth": environment.NewNumber(40)}, []string{"precision", "linewidth"})})
 	po2, _ := getPo.Builtin([]environment.Value{})
-	if po2.Obj.Entries["precision"].Num != 3 || po2.Obj.Entries["linewidth"].Num != 40 { t.Fatalf("set_printoptions failed: %v", po2) }
+	if po2.Obj.Entries["precision"].Num != 3 || po2.Obj.Entries["linewidth"].Num != 40 {
+		t.Fatalf("set_printoptions failed: %v", po2)
+	}
 }

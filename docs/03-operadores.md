@@ -88,6 +88,33 @@ print(b)  # 8
 print(x)  # 8
 ```
 
+## Atribuições compostas (+=, -=, *=, /=, %=)
+
+Operadores compostos combinam uma operação binária com uma atribuição. Ex.: `x += y` é equivalente a `x = x + y` (avaliando `x` apenas uma vez). São suportados para variáveis, propriedades e índices.
+
+```js
+let x = 10
+x += 5      # x == 15
+x -= 3      # x == 12
+x *= 2      # x == 24
+x /= 4      # x == 6
+x %= 4      # x == 2
+
+let s = "a"
+s += "b"   # concatenação → "ab"
+
+let o = {v: 1}
+o.v += 2    # o.v == 3
+let a = [1,2,3]
+a[1] *= 3   # a == [1, 6, 3]
+```
+
+Observações:
+
+- `+=` faz concatenação se um dos operandos for `string`.
+- Não é permitido usar atribuições compostas em *destructuring* (ex.: `[a, b] += ...` causará erro de runtime).
+- Operações inválidas (ex.: soma de `null` com número) geram erro de runtime.
+
 ## Precedência de operadores
 
 Do **mais alto** (avaliado primeiro) ao **mais baixo**:
