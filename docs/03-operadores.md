@@ -102,10 +102,22 @@ Do **mais alto** (avaliado primeiro) ao **mais baixo**:
 | 6     | `==`, `!=`                  | Igualdade                  |
 | 7     | `&&`                        | E lógico                   |
 | 8     | `\|\|`                      | OU lógico                  |
+| 9     | `?:`                        | Operador ternário (condicional)
 
 Use parênteses para alterar a ordem de avaliação:
 
 ```js
 print(2 + 3 * 4)     # 14 (multiplicação primeiro)
 print((2 + 3) * 4)   # 20 (parênteses alteram a ordem)
+```
+
+## Operador ternário
+
+A expressão condicional `cond ? then : else` avalia `cond` e retorna `then` se for truthy, caso contrário `else`. O operador é **right‑associative** e tem precedência mais baixa que operadores lógicos.
+
+Exemplos:
+
+```js
+print((1 > 0) ? 3 : 4)        # 3
+print(false ? 1 : true ? 2 : 3)  # 2  (aninhamento direito)
 ```

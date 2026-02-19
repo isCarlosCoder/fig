@@ -161,7 +161,8 @@ printStmt
     : TK_PRINT LPAREN (expr (COMMA expr)*)? RPAREN SEMICOLON?
     ;
 
-expr: logicalOr ;
+expr: conditional ;
+conditional: logicalOr ( QUESTION expr COLON conditional )? ;
 logicalOr: logicalAnd ( OR logicalAnd )* ;
 logicalAnd: equality ( AND equality )* ;
 equality: comparison ( ( EQ | NEQ ) comparison )* ;

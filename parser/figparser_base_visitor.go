@@ -155,6 +155,10 @@ func (v *BaseFigParserVisitor) VisitExpr(ctx *ExprContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseFigParserVisitor) VisitConditional(ctx *ConditionalContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseFigParserVisitor) VisitLogicalOr(ctx *LogicalOrContext) interface{} {
 	return v.VisitChildren(ctx)
 }

@@ -1200,8 +1200,8 @@ func (v *FigVisitor) VisitPrintStmt(ctx *parser.PrintStmtContext) interface{} {
 
 // Expression evaluation follows the grammar hierarchy.
 func (v *FigVisitor) VisitExpr(ctx *parser.ExprContext) interface{} {
-	if ctx.LogicalOr() != nil {
-		return v.VisitLogicalOr(ctx.LogicalOr().(*parser.LogicalOrContext))
+	if ctx.Conditional() != nil {
+		return v.VisitConditional(ctx.Conditional().(*parser.ConditionalContext))
 	}
 	// safety fallback — should never happen with a valid grammar
 	result := v.VisitChildren(ctx)
@@ -1209,6 +1209,33 @@ func (v *FigVisitor) VisitExpr(ctx *parser.ExprContext) interface{} {
 		return environment.NewNil()
 	}
 	return result
+}
+
+func (v *FigVisitor) VisitConditional(ctx *parser.ConditionalContext) interface{} {
+	// conditional: logicalOr ( QUESTION expr COLON conditional )? ;
+	// If there is no '?' part, evaluate as a logicalOr
+	if ctx.QUESTION() == nil {
+		return v.VisitLogicalOr(ctx.LogicalOr().(*parser.LogicalOrContext))
+	}
+
+	condVal := v.VisitLogicalOr(ctx.LogicalOr().(*parser.LogicalOrContext)).(environment.Value)
+	if v.RuntimeErr != nil {
+		return environment.NewNil()
+	}
+
+	if condVal.IsTruthy() {
+		// 'then' expression is the single Expr child of this context
+		if ctx.Expr() != nil {
+			return v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+		}
+		return environment.NewNil()
+	}
+
+	// else branch is represented by a nested Conditional (right-associative)
+	if ctx.Conditional() != nil {
+		return v.VisitConditional(ctx.Conditional().(*parser.ConditionalContext)).(environment.Value)
+	}
+	return environment.NewNil()
 }
 
 func (v *FigVisitor) VisitLogicalAnd(ctx *parser.LogicalAndContext) interface{} {

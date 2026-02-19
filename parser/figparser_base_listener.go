@@ -244,6 +244,12 @@ func (s *BaseFigParserListener) EnterExpr(ctx *ExprContext) {}
 // ExitExpr is called when production expr is exited.
 func (s *BaseFigParserListener) ExitExpr(ctx *ExprContext) {}
 
+// EnterConditional is called when production conditional is entered.
+func (s *BaseFigParserListener) EnterConditional(ctx *ConditionalContext) {}
+
+// ExitConditional is called when production conditional is exited.
+func (s *BaseFigParserListener) ExitConditional(ctx *ConditionalContext) {}
+
 // EnterLogicalOr is called when production logicalOr is entered.
 func (s *BaseFigParserListener) EnterLogicalOr(ctx *LogicalOrContext) {}
 

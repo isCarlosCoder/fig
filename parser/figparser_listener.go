@@ -118,6 +118,9 @@ type FigParserListener interface {
 	// EnterExpr is called when entering the expr production.
 	EnterExpr(c *ExprContext)
 
+	// EnterConditional is called when entering the conditional production.
+	EnterConditional(c *ConditionalContext)
+
 	// EnterLogicalOr is called when entering the logicalOr production.
 	EnterLogicalOr(c *LogicalOrContext)
 
@@ -288,6 +291,9 @@ type FigParserListener interface {
 
 	// ExitExpr is called when exiting the expr production.
 	ExitExpr(c *ExprContext)
+
+	// ExitConditional is called when exiting the conditional production.
+	ExitConditional(c *ConditionalContext)
 
 	// ExitLogicalOr is called when exiting the logicalOr production.
 	ExitLogicalOr(c *LogicalOrContext)

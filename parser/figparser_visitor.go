@@ -118,6 +118,9 @@ type FigParserVisitor interface {
 	// Visit a parse tree produced by FigParser#expr.
 	VisitExpr(ctx *ExprContext) interface{}
 
+	// Visit a parse tree produced by FigParser#conditional.
+	VisitConditional(ctx *ConditionalContext) interface{}
+
 	// Visit a parse tree produced by FigParser#logicalOr.
 	VisitLogicalOr(ctx *LogicalOrContext) interface{}
 
