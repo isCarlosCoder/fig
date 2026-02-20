@@ -73,16 +73,21 @@ Para cross-compilar, ajuste `GOOS`/`GOARCH` e garanta toolchain C para a platafo
 ## Uso
 
 ```bash
-fig run programa.fig    # executar arquivo
-fig run                # executar main via fig.toml
-fig init meu-projeto   # criar projeto
-fig install <alias>      # instalar um módulo registrado no FigRepo (ex.: logger)
-fig install a b          # instalar vários aliases de uma vez
-fig install              # sincronizar deps do fig.toml
-fig remove <alias>       # remover módulo (p.ex.: logger)
-fig remove a b           # remover vários de uma vez
-fig --version           # versão (0.1.0)
-fig --help              # ajuda
+fig                         # entra no REPL interativo
+fig -i programa.fig         # entra no REPL com programa.fig carregado
+fig run programa.fig        # executar arquivo
+fig run                     # executar main via fig.toml
+fig init meu-projeto        # criar projeto
+fig install <alias>         # instalar um módulo registrado no FigRepo (ex.: logger)
+fig install a b             # instalar vários aliases de uma vez
+fig install                 # sincronizar deps do fig.toml
+fig remove <alias>          # remover módulo (p.ex.: logger)
+fig remove a b              # remover vários de uma vez
+fig test                    # executar testes
+fig test <arquivo>          # executar testes de um arquivo específico
+fig setup-ffi               # configurar ambiente para Foreign Function Interface (FFI)
+fig --version               # versão (0.1.0)
+fig --help                  # ajuda
 ```
 
 ## Convenções de Estilo
