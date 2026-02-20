@@ -80,7 +80,6 @@ let inteiro = 42
 let decimal = 3.14
 let negativo = -7
 
-```js
 # Notação científica (exponencial)
 # Suportada para números grandes/pequenos: `1e9`, `1.2e-3`, `2E2`, `1e+3`, `-1e3`
 let grande = 1e9
@@ -93,7 +92,6 @@ print(pequeno)      # 0.0012
 print(comE)         # 200
 print(comMais)      # 1000
 print(negativoExp)  # -1000
-```
 ```
 
 Operações aritméticas retornam números:
