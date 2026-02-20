@@ -52,6 +52,15 @@ let inexistente = system.env("VAR_QUE_NAO_EXISTE")
 print(inexistente)  # null
 ```
 
+### system.setenv(nome, valor)
+
+Define ou atualiza uma variável de ambiente para o processo atual:
+
+```js
+system.setenv("MINHA_VAR", "valor123")
+print(system.env("MINHA_VAR"))  # valor123
+```
+
 ### system.args()
 
 Retorna os argumentos de linha de comando do processo como array (equivalente a `os.Args`):

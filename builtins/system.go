@@ -85,6 +85,20 @@ func init() {
 			return environment.NewString(val), nil
 		}),
 
+		fn("setenv", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 2 {
+				return environment.NewNil(), fmt.Errorf("setenv() expects 2 arguments, got %d", len(args))
+			}
+			if args[0].Type != environment.StringType || args[1].Type != environment.StringType {
+				return environment.NewNil(), fmt.Errorf("setenv() arguments must be strings")
+			}
+			err := os.Setenv(args[0].Str, args[1].Str)
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("setenv() error: %v", err)
+			}
+			return environment.NewNil(), nil
+		}),
+
 		// exit(code) — exits the process with given code
 		// Uses panic(ExitSignal) so the signal can be caught by the test runner.
 		fn("exit", func(args []environment.Value) (environment.Value, error) {

@@ -184,7 +184,7 @@ meu-projeto/
 | [io](docs/modules/io.md) | Entrada/saída e arquivos | 15 funções |
 | [json](docs/modules/json.md) | Serialização e parsing JSON | 4 funções |
 | [http](docs/modules/http.md) | Cliente e servidor HTTP | 12 funções |
-| [system](docs/modules/system.md) | Sistema, tempo e ambiente | 15 funções |
+| [system](docs/modules/system.md) | Sistema, tempo e ambiente | 16 funções |
 | [term](docs/modules/term.md) | Terminal control and utilities (experimental) | 30+ funções |
 | [crypto](docs/modules/crypto.md) | Hashes e codificação | 7 funções |
 | [regex](docs/modules/regex.md) | Expressões regulares | 4 funções |

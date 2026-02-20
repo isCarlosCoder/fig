@@ -163,3 +163,17 @@ func TestSystemExecCommand(t *testing.T) {
 		t.Fatalf("expected 'hello world', got %q", out)
 	}
 }
+
+func TestSystemSetEnvAndGet(t *testing.T) {
+	src := useSystem(`
+	system.setenv("FIGTEST_VAR", "testvalue");
+	print(system.env("FIGTEST_VAR"));
+	`)
+	out, err := runFig(t, src)
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "testvalue" {
+		t.Fatalf("expected 'testvalue', got %q", out)
+	}
+}
