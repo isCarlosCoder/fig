@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"hash/fnv"
 
+	"github.com/google/uuid"
+
 	"github.com/iscarloscoder/fig/environment"
 )
 
@@ -101,6 +103,14 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("hexDecode() invalid hex: %v", err)
 			}
 			return environment.NewString(string(decoded)), nil
+		}),
+
+		fn("uuid", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 0 {
+				return environment.NewNil(), fmt.Errorf("uuid() expects no arguments, got %d", len(args))
+			}
+			uuid := uuid.New().String()
+			return environment.NewString(uuid), nil
 		}),
 	))
 }
