@@ -3,6 +3,7 @@ package builtins
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -197,6 +198,36 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("version() expects 0 arguments, got %d", len(args))
 			}
 			return environment.NewString("0.1.0"), nil
+		}),
+		fn("exec", func(args []environment.Value) (environment.Value, error) {
+			if len(args) == 0 {
+				return environment.NewNil(), fmt.Errorf("exec() expects at least 1 argument, got %d", len(args))
+			}
+			cmd := args[0]
+			if cmd.Type != environment.StringType {
+				return environment.NewNil(), fmt.Errorf("exec() first argument must be a string")
+			}
+			cmdArgs := []string{cmd.Str}
+			for _, arg := range args[1:] {
+				if arg.Type != environment.StringType {
+					return environment.NewNil(), fmt.Errorf("exec() arguments must be strings")
+				}
+				cmdArgs = append(cmdArgs, arg.Str)
+			}
+
+			// check if executable exists in PATH before running
+			_, err := exec.LookPath(cmdArgs[0])
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("exec() error: command not found: %s", cmdArgs[0])
+			}
+
+			// using exec.Command to run the command and capture output
+			c := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+			output, err := c.CombinedOutput()
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("exec() error: %v, output: %s", err, string(output))
+			}
+			return environment.NewString(string(output)), nil
 		}),
 	))
 }

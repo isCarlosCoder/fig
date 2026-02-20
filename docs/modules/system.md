@@ -208,11 +208,24 @@ print("Soma: " + soma)
 print("Tempo: " + (fim - inicio) + "s")
 ```
 
+## Execução de comandos
+
+`system.exec(cmds...)` é uma função que executa um comando do sistema operacional e retorna a saída como string. O primeiro argumento é o nome do comando, e os argumentos subsequentes são passados para o comando. O retorno é tratado como uma string contendo a saida padrão do comando em texto bruto.
+
+```js
+use "system"
+
+let data = system.exec("echo", "Hello, World!")
+print(data)
+```
+
+output: Hello, World!
+
 ## Referência rápida
 
-| Função               | Descrição                                    |
-|---------------------|-----------------------------------------------|
-| `system.now()`            | Timestamp Unix em milissegundos               |
+| Função               | Descrição                                         |
+|---------------------|----------------------------------------------------|
+| `system.now()`            | Timestamp Unix em milissegundos              |
 | `system.clock()`         | Tempo em segundos (alta precisão)             |
 | `system.sleep(ms)`       | Pausar por N milissegundos                    |
 | `system.env(name)`       | Variável de ambiente                          |
@@ -226,3 +239,4 @@ print("Tempo: " + (fim - inicio) + "s")
 | `system.enableStepLimit()`  | Reabilita a checagem de passos (experimental) |
 | `system.isStepLimitDisabled()` | Retorna boolean indicando se o limite está desabilitado |
 | `system.withoutStepLimit(fn)`  | Executa `fn` com a checagem de passos desabilitada (requer `task`) |
+| `system.exec(cmds...)` | Executa um comando do sistema e retorna a saída como string |

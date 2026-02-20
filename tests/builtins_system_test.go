@@ -152,3 +152,14 @@ func TestSystemSleepWrongType(t *testing.T) {
 		t.Fatal("expected error for sleep() with string arg")
 	}
 }
+
+func TestSystemExecCommand(t *testing.T) {
+	src := useSystem(`let data = system.exec("echo", "hello world"); print(data);`)
+	out, err := runFig(t, src)
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	if out != "hello world" {
+		t.Fatalf("expected 'hello world', got %q", out)
+	}
+}
