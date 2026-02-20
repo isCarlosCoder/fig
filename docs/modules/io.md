@@ -176,6 +176,38 @@ if (io.exists("lista.txt")) {
 }
 ```
 
+## CSV (em desenvolvimento)
+
+### io.writeCSV(path, data)
+
+```js
+use "io"
+
+let tabela = [
+    { nome: "Alice", idade: 30 },
+    { nome: "Bob", idade: 25 }
+]
+
+io.writeCSV("pessoas.csv", tabela)
+```
+
+Para ler CSV, use `io.readCSV(path)` que retorna um array de objetos, onde cada objeto representa uma linha com chaves como os nomes das colunas.
+
+```js
+let pessoas = io.readCSV("pessoas.csv")
+
+for pessoa in pessoas {
+    print(pessoa.nome + " tem " + pessoa.idade + " anos")
+}
+```
+
+saida:
+
+```bash
+Alice tem 30 anos
+Bob tem 25 anos
+```
+
 ## Referência rápida
 
 | Função                       | Descrição                               |
@@ -193,3 +225,5 @@ if (io.exists("lista.txt")) {
 | `io.rmdir(path)`             | Remover diretório vazio                  |
 | `io.rmdirAll(path)`          | Remover diretório recursivamente (rm -rf)|
 | `io.deleteFile(path)`        | Remover arquivo                          |
+| `io.writeCSV(path, data)`    | Escrever array de objetos em arquivo CSV |
+| `io.readCSV(path)`           | Ler arquivo CSV como array de objetos    |

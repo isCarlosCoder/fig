@@ -131,3 +131,35 @@ func TestIOAppendCreatesFile(t *testing.T) {
 		t.Errorf("expected 'created', got %q", out)
 	}
 }
+
+func TestIOWriteCSV(t *testing.T) {
+	tmp := t.TempDir() + "/data.csv"
+	code := `let data = [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]; io.writeCSV("` + tmp + `", data)`
+	_, err := runFig(t, useIO(code))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	content, err := os.ReadFile(tmp)
+	if err != nil {
+		t.Fatalf("failed to read CSV file: %v", err)
+	}
+	expected := "name,age\nAlice,30\nBob,25\n"
+	if string(content) != expected {
+		t.Errorf("CSV content mismatch.\nExpected:\n%q\nGot:\n%q", expected, string(content))
+	}
+}
+
+func TestIOReadCSV(t *testing.T) {
+	tmp := t.TempDir() + "/data.csv"
+	csvContent := "name,age\nAlice,30\nBob,25\n"
+	os.WriteFile(tmp, []byte(csvContent), 0644)
+	code := `let data = io.readCSV("` + tmp + `"); print(data)`
+	out, err := runFig(t, useIO(code))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := "[{name: \"Alice\", age: \"30\"}, {name: \"Bob\", age: \"25\"}]"
+	if strings.TrimSpace(out) != expected {
+		t.Errorf("expected %q, got %q", expected, out)
+	}
+}

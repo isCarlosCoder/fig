@@ -2,6 +2,7 @@ package builtins
 
 import (
 	"bufio"
+	"encoding/csv"
 	"fmt"
 	"os"
 
@@ -69,7 +70,7 @@ func init() {
 			}
 			path := args[0].Str
 			content := args[1].Str
-			err := os.WriteFile(path, []byte(content), 0644)
+			err := os.WriteFile(path, []byte(content), 0o644)
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("writeFile(): %v", err)
 			}
@@ -89,7 +90,7 @@ func init() {
 			}
 			path := args[0].Str
 			content := args[1].Str
-			f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("appendFile(): %v", err)
 			}
@@ -142,7 +143,7 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("mkdir() path must be a string")
 			}
 			path := args[0].Str
-			err := os.Mkdir(path, 0755)
+			err := os.Mkdir(path, 0o755)
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("mkdir(): %v", err)
 			}
@@ -158,7 +159,7 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("mkdirAll() path must be a string")
 			}
 			path := args[0].Str
-			err := os.MkdirAll(path, 0755)
+			err := os.MkdirAll(path, 0o755)
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("mkdirAll(): %v", err)
 			}
@@ -230,6 +231,110 @@ func init() {
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("deleteFile(): %v", err)
 			}
+			return environment.NewNil(), nil
+		}),
+
+		fn("readCSV", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 1 {
+				return environment.NewNil(), fmt.Errorf("readCSV() expects 1 argument, got %d", len(args))
+			}
+			if args[0].Type != environment.StringType {
+				return environment.NewNil(), fmt.Errorf("readCSV() path must be a string")
+			}
+			path := args[0].Str
+			f, err := os.Open(path)
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("readCSV(): %v", err)
+			}
+			defer f.Close()
+
+			r := csv.NewReader(f)
+			records, err := r.ReadAll()
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("readCSV(): %v", err)
+			}
+
+			// we will return a array<object> format where each row is an object with keys as column names (from header) and values as cell values
+			if len(records) == 0 {
+				return environment.NewArray([]environment.Value{}), nil
+			}
+
+			header := records[0]
+			rows := make([]environment.Value, 0, len(records)-1)
+			for _, record := range records[1:] {
+				obj := make(map[string]environment.Value)
+				for i, cell := range record {
+					if i < len(header) {
+						obj[header[i]] = environment.NewString(cell)
+					}
+				}
+
+				rows = append(rows, environment.NewObject(obj, header))
+			}
+
+			return environment.NewArray(rows), nil
+		}),
+
+		fn("writeCSV", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 2 {
+				return environment.NewNil(), fmt.Errorf("writeCSV() expects 2 arguments, got %d", len(args))
+			}
+			if args[0].Type != environment.StringType {
+				return environment.NewNil(), fmt.Errorf("writeCSV() path must be a string")
+			}
+			if args[1].Type != environment.ArrayType {
+				return environment.NewNil(), fmt.Errorf("writeCSV() data must be an array of objects")
+			}
+			path := args[0].Str
+			arr := args[1].Arr
+
+			f, err := os.Create(path)
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("writeCSV(): %v", err)
+			}
+			defer f.Close()
+
+			w := csv.NewWriter(f)
+			defer w.Flush()
+
+			// we expect an array of objects where keys are column names and values are cell values
+			if len(*arr) == 0 {
+				return environment.NewNil(), nil
+			}
+
+			// get header from keys of the first object
+			firstObj := (*arr)[0]
+			if firstObj.Type != environment.ObjectType {
+				return environment.NewNil(), fmt.Errorf("writeCSV() data must be an array of objects")
+			}
+			header := make([]string, 0, len(firstObj.Obj.Entries))
+			for k := range firstObj.Obj.Entries {
+				header = append(header, k)
+			}
+
+			err = w.Write(header)
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("writeCSV(): %v", err)
+			}
+
+			for _, v := range *arr {
+				if v.Type != environment.ObjectType {
+					return environment.NewNil(), fmt.Errorf("writeCSV() data must be an array of objects")
+				}
+				row := make([]string, len(header))
+				for i, col := range header {
+					if cellVal, ok := v.Obj.Entries[col]; ok {
+						row[i] = cellVal.String()
+					} else {
+						row[i] = ""
+					}
+				}
+				err = w.Write(row)
+				if err != nil {
+					return environment.NewNil(), fmt.Errorf("writeCSV(): %v", err)
+				}
+			}
+
 			return environment.NewNil(), nil
 		}),
 	))
