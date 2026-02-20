@@ -74,25 +74,23 @@ func (s *BaseFigParserListener) EnterFnDecl(ctx *FnDeclContext) {}
 // ExitFnDecl is called when production fnDecl is exited.
 func (s *BaseFigParserListener) ExitFnDecl(ctx *FnDeclContext) {}
 
+// EnterNativeFnDecl is called when production nativeFnDecl is entered.
+func (s *BaseFigParserListener) EnterNativeFnDecl(ctx *NativeFnDeclContext) {}
+
+// ExitNativeFnDecl is called when production nativeFnDecl is exited.
+func (s *BaseFigParserListener) ExitNativeFnDecl(ctx *NativeFnDeclContext) {}
+
 // EnterFnParams is called when production fnParams is entered.
 func (s *BaseFigParserListener) EnterFnParams(ctx *FnParamsContext) {}
 
 // ExitFnParams is called when production fnParams is exited.
 func (s *BaseFigParserListener) ExitFnParams(ctx *FnParamsContext) {}
 
-// EnterParamWithDefaultOrRequired is called when production paramWithDefaultOrRequired is entered.
-func (s *BaseFigParserListener) EnterParamWithDefaultOrRequired(ctx *ParamWithDefaultOrRequiredContext) {
-}
+// EnterParamDecl is called when production paramDecl is entered.
+func (s *BaseFigParserListener) EnterParamDecl(ctx *ParamDeclContext) {}
 
-// ExitParamWithDefaultOrRequired is called when production paramWithDefaultOrRequired is exited.
-func (s *BaseFigParserListener) ExitParamWithDefaultOrRequired(ctx *ParamWithDefaultOrRequiredContext) {
-}
-
-// EnterParamOptional is called when production paramOptional is entered.
-func (s *BaseFigParserListener) EnterParamOptional(ctx *ParamOptionalContext) {}
-
-// ExitParamOptional is called when production paramOptional is exited.
-func (s *BaseFigParserListener) ExitParamOptional(ctx *ParamOptionalContext) {}
+// ExitParamDecl is called when production paramDecl is exited.
+func (s *BaseFigParserListener) ExitParamDecl(ctx *ParamDeclContext) {}
 
 // EnterReturnStmt is called when production returnStmt is entered.
 func (s *BaseFigParserListener) EnterReturnStmt(ctx *ReturnStmtContext) {}

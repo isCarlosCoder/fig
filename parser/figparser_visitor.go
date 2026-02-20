@@ -34,14 +34,14 @@ type FigParserVisitor interface {
 	// Visit a parse tree produced by FigParser#fnDecl.
 	VisitFnDecl(ctx *FnDeclContext) interface{}
 
+	// Visit a parse tree produced by FigParser#nativeFnDecl.
+	VisitNativeFnDecl(ctx *NativeFnDeclContext) interface{}
+
 	// Visit a parse tree produced by FigParser#fnParams.
 	VisitFnParams(ctx *FnParamsContext) interface{}
 
-	// Visit a parse tree produced by FigParser#paramWithDefaultOrRequired.
-	VisitParamWithDefaultOrRequired(ctx *ParamWithDefaultOrRequiredContext) interface{}
-
-	// Visit a parse tree produced by FigParser#paramOptional.
-	VisitParamOptional(ctx *ParamOptionalContext) interface{}
+	// Visit a parse tree produced by FigParser#paramDecl.
+	VisitParamDecl(ctx *ParamDeclContext) interface{}
 
 	// Visit a parse tree produced by FigParser#returnStmt.
 	VisitReturnStmt(ctx *ReturnStmtContext) interface{}

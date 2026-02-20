@@ -1,0 +1,3 @@
+@native fn double(x) { return x * 2 }
+
+let exported_value = 7

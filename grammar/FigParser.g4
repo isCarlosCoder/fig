@@ -27,6 +27,7 @@ statements
     | structDecl
     | enumDecl
     | exprStmt
+    | nativeFnDecl
     ;
 
 exprStmt
@@ -57,13 +58,17 @@ fnDecl
     : TK_FN ID LPAREN fnParams? RPAREN block
     ;
 
+nativeFnDecl
+    : AT TK_NATIVE (LPAREN expr? RPAREN)? TK_FN ID LPAREN fnParams? RPAREN block
+    ;
+
 fnParams
     : paramDecl (COMMA paramDecl)*
     ;
 
 paramDecl
-    : ID (ASSIGN expr)?        # paramWithDefaultOrRequired
-    | ID QUESTION              # paramOptional
+    : ID (ASSIGN expr)?
+    | ID QUESTION
     ;
 
 returnStmt

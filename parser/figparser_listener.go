@@ -34,14 +34,14 @@ type FigParserListener interface {
 	// EnterFnDecl is called when entering the fnDecl production.
 	EnterFnDecl(c *FnDeclContext)
 
+	// EnterNativeFnDecl is called when entering the nativeFnDecl production.
+	EnterNativeFnDecl(c *NativeFnDeclContext)
+
 	// EnterFnParams is called when entering the fnParams production.
 	EnterFnParams(c *FnParamsContext)
 
-	// EnterParamWithDefaultOrRequired is called when entering the paramWithDefaultOrRequired production.
-	EnterParamWithDefaultOrRequired(c *ParamWithDefaultOrRequiredContext)
-
-	// EnterParamOptional is called when entering the paramOptional production.
-	EnterParamOptional(c *ParamOptionalContext)
+	// EnterParamDecl is called when entering the paramDecl production.
+	EnterParamDecl(c *ParamDeclContext)
 
 	// EnterReturnStmt is called when entering the returnStmt production.
 	EnterReturnStmt(c *ReturnStmtContext)
@@ -208,14 +208,14 @@ type FigParserListener interface {
 	// ExitFnDecl is called when exiting the fnDecl production.
 	ExitFnDecl(c *FnDeclContext)
 
+	// ExitNativeFnDecl is called when exiting the nativeFnDecl production.
+	ExitNativeFnDecl(c *NativeFnDeclContext)
+
 	// ExitFnParams is called when exiting the fnParams production.
 	ExitFnParams(c *FnParamsContext)
 
-	// ExitParamWithDefaultOrRequired is called when exiting the paramWithDefaultOrRequired production.
-	ExitParamWithDefaultOrRequired(c *ParamWithDefaultOrRequiredContext)
-
-	// ExitParamOptional is called when exiting the paramOptional production.
-	ExitParamOptional(c *ParamOptionalContext)
+	// ExitParamDecl is called when exiting the paramDecl production.
+	ExitParamDecl(c *ParamDeclContext)
 
 	// ExitReturnStmt is called when exiting the returnStmt production.
 	ExitReturnStmt(c *ReturnStmtContext)

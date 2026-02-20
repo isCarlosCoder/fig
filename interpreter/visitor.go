@@ -235,6 +235,9 @@ func (v *FigVisitor) VisitStatements(ctx *parser.StatementsContext) interface{} 
 	if ctx.ContinueStmt() != nil {
 		return v.VisitContinueStmt(ctx.ContinueStmt().(*parser.ContinueStmtContext))
 	}
+	if ctx.NativeFnDecl() != nil {
+		return v.VisitNativeFnDecl(ctx.NativeFnDecl().(*parser.NativeFnDeclContext))
+	}
 	if ctx.FnDecl() != nil {
 		return v.VisitFnDecl(ctx.FnDecl().(*parser.FnDeclContext))
 	}
@@ -397,18 +400,15 @@ func (v *FigVisitor) VisitStructDecl(ctx *parser.StructDeclContext) interface{} 
 			var params []environment.Param
 			if fp := m.FnParams(); fp != nil {
 				for _, pd := range fp.(*parser.FnParamsContext).AllParamDecl() {
-					switch pctx := pd.(type) {
-					case *parser.ParamWithDefaultOrRequiredContext:
-						param := environment.Param{Name: pctx.ID().GetText()}
-						if pctx.ASSIGN() != nil {
-							param.HasDefault = true
-							param.Default = pctx.Expr()
-						}
-						params = append(params, param)
-					case *parser.ParamOptionalContext:
-						param := environment.Param{Name: pctx.ID().GetText(), Optional: true}
-						params = append(params, param)
+					pctx := pd.(*parser.ParamDeclContext)
+					param := environment.Param{Name: pctx.ID().GetText()}
+					if pctx.ASSIGN() != nil {
+						param.HasDefault = true
+						param.Default = pctx.Expr()
+					} else if pctx.QUESTION() != nil {
+						param.Optional = true
 					}
+					params = append(params, param)
 				}
 			}
 			fd := &environment.FuncDef{
@@ -545,6 +545,8 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 	}
 
 	source := string(data)
+	// Preprocess attributes (so `@native` and similar attrs work in imported files)
+	source = preprocessAttributes(source)
 
 	// Parse the imported file
 	is := antlr.NewInputStream(source)
@@ -725,6 +727,8 @@ func (v *FigVisitor) importModule(modPath, alias string, ctx *parser.ImportStmtC
 	}
 
 	source := string(data)
+	// Preprocess attributes (so `@native` and similar attrs work in module files)
+	source = preprocessAttributes(source)
 	is := antlr.NewInputStream(source)
 	lex := parser.NewFigLexer(is)
 	ts := antlr.NewCommonTokenStream(lex, antlr.TokenDefaultChannel)
@@ -1763,20 +1767,16 @@ func (v *FigVisitor) VisitPrimary(ctx *parser.PrimaryContext) interface{} {
 		if ctx.FnParams() != nil {
 			fp := ctx.FnParams().(*parser.FnParamsContext)
 			for _, pd := range fp.AllParamDecl() {
-				switch pctx := pd.(type) {
-				case *parser.ParamWithDefaultOrRequiredContext:
-					name := pctx.ID().GetText()
-					param := environment.Param{Name: name}
-					if pctx.ASSIGN() != nil {
-						param.HasDefault = true
-						param.Default = pctx.Expr()
-					}
-					params = append(params, param)
-				case *parser.ParamOptionalContext:
-					name := pctx.ID().GetText()
-					param := environment.Param{Name: name, Optional: true}
-					params = append(params, param)
+				pctx := pd.(*parser.ParamDeclContext)
+				name := pctx.ID().GetText()
+				param := environment.Param{Name: name}
+				if pctx.ASSIGN() != nil {
+					param.HasDefault = true
+					param.Default = pctx.Expr()
+				} else if pctx.QUESTION() != nil {
+					param.Optional = true
 				}
+				params = append(params, param)
 			}
 		}
 		fd := &environment.FuncDef{
@@ -3043,6 +3043,79 @@ func (v *FigVisitor) visitBlockRaw(ctx *parser.BlockContext) interface{} {
 	return nil
 }
 
+// VisitNativeFnDecl handles grammar-level `@native fn ...` declarations.
+func (v *FigVisitor) VisitNativeFnDecl(ctx *parser.NativeFnDeclContext) interface{} {
+	if v.RuntimeErr != nil {
+		return nil
+	}
+	name := ctx.ID().GetText()
+
+	// collect params
+	var params []environment.Param
+	if ctx.FnParams() != nil {
+		for _, pd := range ctx.FnParams().(*parser.FnParamsContext).AllParamDecl() {
+			pctx := pd.(*parser.ParamDeclContext)
+			param := environment.Param{Name: pctx.ID().GetText()}
+			if pctx.ASSIGN() != nil {
+				param.HasDefault = true
+				param.Default = pctx.Expr()
+			} else if pctx.QUESTION() != nil {
+				param.Optional = true
+			}
+			params = append(params, param)
+		}
+	}
+
+	fd := &environment.FuncDef{
+		Name:       name,
+		Params:     params,
+		Body:       ctx.Block(),
+		ClosureEnv: v.env,
+		DefFile:    v.currentFile,
+		DefLine:    ctx.GetStart().GetLine(),
+	}
+
+	// optional attribute expression inside @native(...)
+	opts := map[string]string{}
+	if ctx.Expr() != nil {
+		vVal := v.VisitExpr(ctx.Expr().(*parser.ExprContext)).(environment.Value)
+		if v.RuntimeErr != nil {
+			return nil
+		}
+		if vVal.Type != environment.StringType {
+			v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), "@native attribute must be a string literal", 1)
+			return nil
+		}
+		raw := strings.TrimSpace(vVal.Str)
+		if raw != "" {
+			for _, part := range strings.Split(raw, ",") {
+				part = strings.TrimSpace(part)
+				if part == "" {
+					continue
+				}
+				if strings.Contains(part, "=") {
+					kv := strings.SplitN(part, "=", 2)
+					opts[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+				} else {
+					opts[part] = "true"
+				}
+			}
+		}
+	}
+
+	// compile native implementation (must succeed)
+	if err := compileNativeFunc(fd); err != nil {
+		v.RuntimeErr = v.makeRuntimeError(ctx.GetStart().GetLine(), ctx.GetStart().GetColumn(), err.Error(), len(name))
+		return nil
+	}
+	fd.NativeOpts = opts
+
+	if err := v.env.Define(name, environment.NewFunction(fd)); err != nil {
+		v.env.Set(name, environment.NewFunction(fd))
+	}
+	return nil
+}
+
 // VisitFnDecl handles function declarations: fn name(params) { body }
 func (v *FigVisitor) VisitFnDecl(ctx *parser.FnDeclContext) interface{} {
 	if v.RuntimeErr != nil {
@@ -3055,18 +3128,15 @@ func (v *FigVisitor) VisitFnDecl(ctx *parser.FnDeclContext) interface{} {
 	if ctx.FnParams() != nil {
 		paramsCtx := ctx.FnParams().(*parser.FnParamsContext)
 		for _, pd := range paramsCtx.AllParamDecl() {
-			switch pctx := pd.(type) {
-			case *parser.ParamWithDefaultOrRequiredContext:
-				param := environment.Param{Name: pctx.ID().GetText()}
-				if pctx.ASSIGN() != nil {
-					param.HasDefault = true
-					param.Default = pctx.Expr()
-				}
-				params = append(params, param)
-			case *parser.ParamOptionalContext:
-				param := environment.Param{Name: pctx.ID().GetText(), Optional: true}
-				params = append(params, param)
+			pctx := pd.(*parser.ParamDeclContext)
+			param := environment.Param{Name: pctx.ID().GetText()}
+			if pctx.ASSIGN() != nil {
+				param.HasDefault = true
+				param.Default = pctx.Expr()
+			} else if pctx.QUESTION() != nil {
+				param.Optional = true
 			}
+			params = append(params, param)
 		}
 	}
 

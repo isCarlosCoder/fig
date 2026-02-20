@@ -15,6 +15,7 @@ MINUSEQ: '-=' ;
 STAREQ: '*=' ;
 SLASHEQ: '/=' ;
 MODEQ: '%=' ;
+AT: '@' ;
 
 // Single-char tokens
 DOT: '.' ;
@@ -59,6 +60,7 @@ TK_ONERROR: 'onerror' ;
 TK_MATCH: 'match' ;
 COMMA: ',' ;
 ARROW: '=>' ;
+TK_NATIVE: 'native' ;
 
 // Array / object tokens
 LBRACKET: '[' ;
