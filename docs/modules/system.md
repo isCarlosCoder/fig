@@ -221,6 +221,8 @@ print(data)
 
 output: Hello, World!
 
+- Obs: Cada argumento deve ser passado como um item separado na lista de argumentos. Por exemplo, para executar `ls -l /home`, você deve chamar `system.exec("ls", "-l", "/home")`.
+
 ## Referência rápida
 
 | Função               | Descrição                                         |
