@@ -86,6 +86,15 @@ let hash = crypto.sha256(conteudo)
 print("SHA-256: " + hash)
 ```
 
+## Exemplo: Gerando UUID
+
+```js
+use "crypto"
+
+let id = crypto.uuid()
+print("UUID: " + id)
+```
+
 ## Referência rápida
 
 | Função                     | Descrição                    |
@@ -97,3 +106,4 @@ print("SHA-256: " + hash)
 | `crypto.base64Decode(s)`   | Decodificar Base64          |
 | `crypto.hexEncode(s)`      | Codificar em hexadecimal    |
 | `crypto.hexDecode(s)`      | Decodificar hexadecimal     |
+| `crypto.uuid()`            | Gerar UUID v4 (string)      |
