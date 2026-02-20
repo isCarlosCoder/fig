@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/iscarloscoder/fig/builtins"
 	"github.com/iscarloscoder/fig/environment"
 	"github.com/iscarloscoder/fig/parser"
 )
@@ -67,6 +68,8 @@ func Run(source, filename string, global *environment.Env, out io.Writer, errOut
 	v := NewFigVisitorWithSource(global, out, source)
 	v.baseDir = filepath.Dir(filename)
 	v.currentFile = filename
+	// keep builtin state in sync
+	builtins.ScriptFile = filename
 	if projectToml, err := findProjectTomlFrom(v.baseDir); err == nil {
 		v.projectRoot = filepath.Dir(projectToml)
 	}
@@ -136,6 +139,8 @@ func RunInEnv(source, filename string, env *environment.Env, out io.Writer, errO
 	v.global = env.Parent() // keep parent linkage if any
 	v.baseDir = filepath.Dir(filename)
 	v.currentFile = filename
+	// update the builtin file variable as well
+	builtins.ScriptFile = filename
 	if projectToml, err := findProjectTomlFrom(v.baseDir); err == nil {
 		v.projectRoot = filepath.Dir(projectToml)
 	}

@@ -2,6 +2,7 @@ package builtins
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
 
 	"github.com/iscarloscoder/fig/environment"
@@ -9,9 +10,13 @@ import (
 
 // Script runtime state injected by CLI before running a script.
 // These are set by `main.runFile` and read by builtins (e.g., system.argv()/cwd()).
+// ScriptFile holds the path of the currently executing .fig source. It is
+// updated by the interpreter when running or importing files, and is used by
+// runtime.file() / runtime.dir().
 var (
 	ScriptArgs []string
 	ScriptCwd  string
+	ScriptFile string
 )
 
 func init() {
@@ -64,6 +69,25 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("numCPU() expects 0 arguments, got %d", len(args))
 			}
 			return environment.NewNumber(float64(runtime.NumCPU())), nil
+		}),
+
+		// file() — absolute path of the currently executing source file
+		fn("file", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 0 {
+				return environment.NewNil(), fmt.Errorf("file() expects 0 arguments, got %d", len(args))
+			}
+			return environment.NewString(ScriptFile), nil
+		}),
+
+		// dir() — directory containing the currently executing source file
+		fn("dir", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 0 {
+				return environment.NewNil(), fmt.Errorf("dir() expects 0 arguments, got %d", len(args))
+			}
+			if ScriptFile == "" {
+				return environment.NewString(""), nil
+			}
+			return environment.NewString(filepath.Dir(ScriptFile)), nil
 		}),
 	))
 }

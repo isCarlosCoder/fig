@@ -97,6 +97,42 @@ print(transitive.dobro(7));`
 	}
 }
 
+func TestImportRuntimeFileInModule(t *testing.T) {
+	// create a small module file inside testdata/foo/bar
+	dir := testdataDir(t)
+	modDir := filepath.Join(dir, "foo", "bar")
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	defer os.RemoveAll(filepath.Join(dir, "foo")) // cleanup
+	libContent := `use "runtime"`
+	libContent += "\n" + `let x = runtime.file(); let y = runtime.dir()`
+	if err := os.WriteFile(filepath.Join(modDir, "lib.fig"), []byte(libContent), 0o644); err != nil {
+		t.Fatalf("write lib.fig: %v", err)
+	}
+
+	src := `import "foo/bar/lib.fig"
+print(lib.x);
+print(lib.y)`
+	// y will store runtime.dir()
+	out, err := runFigSource(t, src)
+	if err != nil {
+		t.Fatalf("runtime error: %v", err)
+	}
+	lines := strings.Split(out, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected two lines of output, got %d", len(lines))
+	}
+	expected := filepath.Join(dir, "foo", "bar", "lib.fig")
+	if lines[0] != expected {
+		t.Fatalf("expected file %q, got %q", expected, lines[0])
+	}
+	expectedDir := filepath.Dir(expected)
+	if lines[1] != expectedDir {
+		t.Fatalf("expected dir %q, got %q", expectedDir, lines[1])
+	}
+}
+
 func TestImportTransitiveFunctionAvailable(t *testing.T) {
 	src := `import "math_utils"
 print(math_utils.mult(3, 4));`

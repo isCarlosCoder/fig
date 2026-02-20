@@ -50,6 +50,26 @@ Retorna o número de CPUs lógicas disponíveis:
 print(runtime.numCPU())  # ex: 8
 ```
 
+## runtime.file()
+
+Retorna o caminho absoluto do arquivo Fig que está sendo executado no
+momento da chamada. Em arquivos importados ou módulos a função sempre reflete
+o próprio arquivo, não o chamador.
+
+```js
+# supondo que este código esteja em "src/foo/bar.lib"
+print(runtime.file())  # /home/.../src/foo/bar.lib
+```
+
+## runtime.dir()
+
+Devolve o diretório que contém o arquivo atual (equivalente a
+`path.dir(runtime.file())`).
+
+```js
+print(runtime.dir())  # .../src/foo
+```
+
 ## Exemplo: Monitoramento de memória
 
 ```js
@@ -78,3 +98,5 @@ print("Coletas de lixo: " + depois.numGC)
 | `runtime.version()` | Versão do Go                         |
 | `runtime.platform()`| SO e arquitetura                     |
 | `runtime.numCPU()`  | Número de CPUs lógicas               |
+| `runtime.file()`    | Caminho absoluto do arquivo atual     |
+| `runtime.dir()`     | Diretório do arquivo atual           |

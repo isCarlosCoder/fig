@@ -593,6 +593,7 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 	v.srcLines = strings.Split(source, "\n")
 	v.baseDir = filepath.Dir(absPath)
 	v.currentFile = absPath
+	builtins.ScriptFile = absPath
 
 	progCtx := tree.(*parser.ProgramContext)
 	// push a module frame so runtime errors show the imported file in the stack
@@ -610,6 +611,7 @@ func (v *FigVisitor) VisitImportStmt(ctx *parser.ImportStmtContext) interface{} 
 	v.baseDir = prevBaseDir
 	v.env = prevEnv
 	v.currentFile = prevCurrentFile
+	builtins.ScriptFile = prevCurrentFile
 
 	if v.RuntimeErr != nil {
 		return nil
@@ -769,6 +771,7 @@ func (v *FigVisitor) importModule(modPath, alias string, ctx *parser.ImportStmtC
 	v.srcLines = strings.Split(source, "\n")
 	v.baseDir = filepath.Dir(absPath)
 	v.currentFile = absPath
+	builtins.ScriptFile = absPath
 
 	progCtx := tree.(*parser.ProgramContext)
 	// push a module frame so runtime errors show the module file in the stack
@@ -781,10 +784,12 @@ func (v *FigVisitor) importModule(modPath, alias string, ctx *parser.ImportStmtC
 	}
 	v.popFrame()
 
+	// Restore state
 	v.srcLines = prevSrcLines
 	v.baseDir = prevBaseDir
 	v.env = prevEnv
 	v.currentFile = prevCurrentFile
+	builtins.ScriptFile = prevCurrentFile
 
 	if v.RuntimeErr != nil {
 		return v.RuntimeErr
@@ -2243,11 +2248,14 @@ func (v *FigVisitor) callFunction(line, col int, fnVal environment.Value, args [
 		if data, err := os.ReadFile(fd.DefFile); err == nil {
 			v.srcLines = strings.Split(string(data), "\n")
 			v.currentFile = fd.DefFile
+			builtins.ScriptFile = fd.DefFile
 		}
 	}
 	defer func() {
 		v.srcLines = prevSrc
 		v.currentFile = prevCurrentFile
+		builtins.ScriptFile = prevCurrentFile
+		builtins.ScriptFile = prevCurrentFile
 	}()
 
 	// create a new scope for the function call (closure over the definition-time env)
