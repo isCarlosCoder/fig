@@ -181,20 +181,20 @@ meu-projeto/
 | [arrays](docs/modules/arrays.md) | Operações com arrays | 15 funções |
 | [objects](docs/modules/objects.md) | Operações com objetos | 9 funções |
 | [types](docs/modules/types.md) | Verificação e conversão de tipos | 12 funções |
-| [io](docs/modules/io.md) | Entrada/saída e arquivos | 7 funções |
+| [io](docs/modules/io.md) | Entrada/saída e arquivos | 15 funções |
 | [json](docs/modules/json.md) | Serialização e parsing JSON | 4 funções |
 | [http](docs/modules/http.md) | Cliente e servidor HTTP | 12 funções |
-| [system](docs/modules/system.md) | Sistema, tempo e ambiente | 8 funções |
-| [term](docs/modules/term.md) | Terminal control and utilities (experimental) | 40+ funções |
+| [system](docs/modules/system.md) | Sistema, tempo e ambiente | 15 funções |
+| [term](docs/modules/term.md) | Terminal control and utilities (experimental) | 30+ funções |
 | [crypto](docs/modules/crypto.md) | Hashes e codificação | 7 funções |
 | [regex](docs/modules/regex.md) | Expressões regulares | 4 funções |
 | [functional](docs/modules/functional.md) | Programação funcional | 5 funções |
 | [debug](docs/modules/debug.md) | Depuração e diagnóstico | 5 funções |
-| [utils](docs/modules/utils.md) | Utilitários pequenos (misc) | ord, chr |
+| [utils](docs/modules/utils.md) | Utilitários | 17 funções |
 | [runtime](docs/modules/runtime.md) | Informações do runtime | 5 funções |
 | [task](docs/modules/task.md) | Concorrência com goroutines | 4 funções |
 | [date](docs/modules/date.md) | Manipulação de datas e horários | 6 funções |
-| [figtest](docs/modules/figtest.md) | Framework de testes integrado | 20 funções |
+| [figtest](docs/modules/figtest.md) | Framework de testes integrado | 23 funções |
 
 ## Exemplos rápidos
 
