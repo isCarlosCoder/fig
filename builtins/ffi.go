@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,25 @@ var structSchemas = map[string][]struct {
 	Field string
 	Type  string
 }{}
+
+// annotation keys for wrapper objects
+const (
+	structDefKey      = "__ffi_struct_def__"
+	structInstanceKey = "__struct__"
+)
+
+// helper that mirrors ffi-gen's IsSupportedType (runtime version)
+func isSupportedType(t string) bool {
+	// accept common synonyms used throughout code
+	switch t {
+	case "int", "integer", "double", "float", "number", "string", "void":
+		return true
+	}
+	if strings.HasPrefix(t, "struct:") && len(t) > 7 {
+		return true
+	}
+	return false
+}
 
 // symbol argument type hints: symbolId -> []argType
 var symbolArgTypesMu sync.Mutex
@@ -445,15 +465,26 @@ func init() {
 			}
 			var argTypes []string
 			if len(args) == 4 {
-				// expect array of strings
+				// expect array of strings or struct descriptor objects
 				if args[3].Type != environment.ArrayType || args[3].Arr == nil {
-					return environment.NewNil(), fmt.Errorf("sym: fourth arg must be array of arg type strings")
+					return environment.NewNil(), fmt.Errorf("sym: fourth arg must be array")
 				}
 				for _, v := range *args[3].Arr {
-					if v.Type != environment.StringType {
-						return environment.NewNil(), fmt.Errorf("sym: argTypes must be array of strings")
+					switch v.Type {
+					case environment.StringType:
+						argTypes = append(argTypes, v.Str)
+					case environment.ObjectType:
+						// wrapper descriptor? look for structDefKey or name
+						if def, ok := v.Obj.Entries[structDefKey]; ok && def.Type == environment.StringType {
+							argTypes = append(argTypes, "struct:"+def.Str)
+						} else if nm, ok := v.Obj.Entries["name"]; ok && nm.Type == environment.StringType {
+							argTypes = append(argTypes, "struct:"+nm.Str)
+						} else {
+							return environment.NewNil(), fmt.Errorf("sym: argTypes array contains unsupported object")
+						}
+					default:
+						return environment.NewNil(), fmt.Errorf("sym: argTypes must be strings or struct descriptors")
 					}
-					argTypes = append(argTypes, v.Str)
 				}
 			}
 			en, helper, projectRoot, callTimeoutMs, err := readFfiConfig()
@@ -657,6 +688,188 @@ func init() {
 				return environment.NewNil(), err
 			}
 			return val, nil
+		}),
+
+		// struct(name, fieldsArr) -> high-level wrapper API
+		// returns a descriptor object with methods: new, validate, flatten
+		fn("struct", func(args []environment.Value) (environment.Value, error) {
+			if len(args) != 2 {
+				return environment.NewNil(), fmt.Errorf("struct(name, fields)")
+			}
+			name, err := args[0].AsString()
+			if err != nil {
+				return environment.NewNil(), fmt.Errorf("struct: name must be string")
+			}
+			if args[1].Type != environment.ArrayType || args[1].Arr == nil {
+				return environment.NewNil(), fmt.Errorf("struct: fields must be array")
+			}
+			var fields []struct {
+				Field string
+				Type  string
+			}
+			for _, el := range *args[1].Arr {
+				if el.Type != environment.ObjectType || el.Obj == nil {
+					return environment.NewNil(), fmt.Errorf("struct: each field must be object")
+				}
+				nV, okN := el.Obj.Entries["name"]
+				tV, okT := el.Obj.Entries["type"]
+				if !okN || !okT || nV.Type != environment.StringType || tV.Type != environment.StringType {
+					return environment.NewNil(), fmt.Errorf("struct: field object must have 'name' and 'type' strings")
+				}
+				tt := tV.Str
+				if !isSupportedType(tt) {
+					return environment.NewNil(), fmt.Errorf("struct %s, field %s: unknown type: %s", name, nV.Str, tt)
+				}
+				fields = append(fields, struct {
+					Field string
+					Type  string
+				}{Field: nV.Str, Type: tt})
+			}
+			// register same as define_struct
+			structSchemasMu.Lock()
+			structSchemas[name] = fields
+			structSchemasMu.Unlock()
+
+			coerce := func(v environment.Value, t string) (environment.Value, error) {
+				isInt := t == "int" || t == "integer"
+				isDouble := t == "double" || t == "float" || t == "number"
+				isString := t == "string" || t == "str"
+				switch {
+				case isInt && v.Type == environment.NumberType:
+					iv := int(v.Num)
+					if math.Abs(v.Num) > math.MaxInt32 {
+						return environment.NewNil(), fmt.Errorf("field %s expects int, value %v overflows int32", t, v.Num)
+					}
+					return environment.NewNumber(float64(iv)), nil
+				case isInt && v.Type == environment.StringType:
+					iv, convErr := strconv.Atoi(v.Str)
+					if convErr != nil {
+						return environment.NewNil(), fmt.Errorf("field expects int, got string %q", v.Str)
+					}
+					return environment.NewNumber(float64(iv)), nil
+				case isDouble && v.Type == environment.NumberType:
+					return environment.NewNumber(v.Num), nil
+				case isDouble && v.Type == environment.StringType:
+					fv, convErr := strconv.ParseFloat(v.Str, 64)
+					if convErr != nil {
+						return environment.NewNil(), fmt.Errorf("field expects double, got string %q", v.Str)
+					}
+					return environment.NewNumber(fv), nil
+				case isString && v.Type == environment.NumberType:
+					return environment.NewString(fmt.Sprintf("%g", v.Num)), nil
+				case isString && v.Type == environment.StringType:
+					return environment.NewString(v.Str), nil
+				case v.Type == environment.NumberType:
+					return environment.NewNumber(v.Num), nil
+				case v.Type == environment.StringType:
+					return environment.NewString(v.Str), nil
+				case v.Type == environment.BooleanType:
+					return environment.NewBool(v.Bool), nil
+				case v.Type == environment.ObjectType:
+					x, err := toEnvironmentValue(v)
+					if err != nil {
+						return environment.NewNil(), err
+					}
+					return x, nil
+				default:
+					return environment.NewNil(), fmt.Errorf("unsupported field type %v", v.Type)
+				}
+			}
+
+			entries := map[string]environment.Value{
+				structDefKey: environment.NewString(name),
+				"name":       environment.NewString(name),
+				"fields":     args[1],
+			}
+			keys := []string{structDefKey, "name", "fields"}
+
+			// new constructor
+			newFn := func(args []environment.Value) (environment.Value, error) {
+				inst := make(map[string]environment.Value)
+				inst["__struct__"] = environment.NewString(name)
+				if len(args) == 1 && args[0].Type == environment.ObjectType && args[0].Obj != nil {
+					for _, f := range fields {
+						v, ok := args[0].Obj.Entries[f.Field]
+						if !ok {
+							return environment.NewNil(), fmt.Errorf("missing field %s", f.Field)
+						}
+						cv, err := coerce(v, f.Type)
+						if err != nil {
+							return environment.NewNil(), err
+						}
+						inst[f.Field] = cv
+					}
+				} else {
+					if len(args) != len(fields) {
+						return environment.NewNil(), fmt.Errorf("expected %d args, got %d", len(fields), len(args))
+					}
+					for i, f := range fields {
+						cv, err := coerce(args[i], f.Type)
+						if err != nil {
+							return environment.NewNil(), err
+						}
+						inst[f.Field] = cv
+					}
+				}
+				return environment.NewObject(inst, nil), nil
+			}
+			entries["new"] = environment.NewBuiltinFn("new", newFn)
+			keys = append(keys, "new")
+
+			validateFn := func(args []environment.Value) (environment.Value, error) {
+				if len(args) != 1 {
+					return environment.NewNil(), fmt.Errorf("validate expects 1 arg")
+				}
+				obj := args[0]
+				if obj.Type != environment.ObjectType || obj.Obj == nil {
+					return environment.NewNil(), fmt.Errorf("validate: argument must be object")
+				}
+				for _, f := range fields {
+					v, ok := obj.Obj.Entries[f.Field]
+					if !ok {
+						return environment.NewNil(), fmt.Errorf("missing field %s", f.Field)
+					}
+					if _, err := coerce(v, f.Type); err != nil {
+						return environment.NewNil(), err
+					}
+				}
+				return environment.NewBool(true), nil
+			}
+			entries["validate"] = environment.NewBuiltinFn("validate", validateFn)
+			keys = append(keys, "validate")
+
+			flattenFn := func(args []environment.Value) (environment.Value, error) {
+				if len(args) != 1 {
+					return environment.NewNil(), fmt.Errorf("flatten expects 1 arg")
+				}
+				obj := args[0]
+				if obj.Type != environment.ObjectType || obj.Obj == nil {
+					return environment.NewNil(), fmt.Errorf("flatten: arg must be object")
+				}
+				var mar []interface{}
+				var types []string
+				if err := expandStructFields(name, obj, &mar, &types); err != nil {
+					return environment.NewNil(), err
+				}
+				vals := make([]environment.Value, len(mar))
+				for i, mv := range mar {
+					vv, err := toEnvironmentValue(mv)
+					if err != nil {
+						return environment.NewNil(), err
+					}
+					vals[i] = vv
+				}
+				tvals := make([]environment.Value, len(types))
+				for i, tv := range types {
+					tvals[i] = environment.NewString(tv)
+				}
+				resp := map[string]environment.Value{"values": environment.NewArray(vals), "types": environment.NewArray(tvals)}
+				return environment.NewObject(resp, []string{"values", "types"}), nil
+			}
+			entries["flatten"] = environment.NewBuiltinFn("flatten", flattenFn)
+			keys = append(keys, "flatten")
+
+			return environment.NewObject(entries, keys), nil
 		}),
 
 		// define_struct(name, fieldsArr) -> registers a struct schema for marshalling

@@ -164,12 +164,59 @@ Tipos de argumento válidos: `"int"`, `"double"`, `"string"`, `"struct:NomeDoStr
 
 ## Structs
 
-### Definindo um struct
+### Definindo um struct (API antiga)
 
 ```js
 ffi.define_struct("Point", [
     { name: "x", type: "int" },
     { name: "y", type: "int" }
+])
+```
+
+### Nova API de wrapper para structs
+
+A partir da versão 0.1.x existe um construtor de structs de alto nível que
+automatiza a definição e a validação. Ele cria um "tipo" Fig com métodos
+úteis (`new`, `validate`, `flatten`) e consulta automaticamente o esquema
+interno ao registrar símbolos.
+
+```js
+let Point = ffi.struct("Point", [
+    { name: "x", type: "int" },
+    { name: "y", type: "int" }
+])
+
+let p1 = Point.new(10, 20)            # positional
+let p2 = Point.new({ y: 5, x: 3 })    # named map
+
+// você pode usar o descritor diretamente em argTypes
+let addPoint = ffi.sym(lib, "add_point", "int", [Point, Point])
+// o runtime converterá para ["struct:Point","struct:Point"]
+
+// validação explícita
+Point.validate(p2)   # true or error
+
+// converter em lista de valores/tipos
+let rep = Point.flatten(p1)
+print(rep.values)     # [10,20]
+print(rep.types)      # ["int","int"]
+```
+
+Você ainda pode usar `ffi.define_struct` e montar objetos manualmente; a nova
+API é compatível e pode ser adotada gradualmente.
+
+### Structs aninhados
+
+```js
+ffi.define_struct("Address", [
+    { name: "city", type: "string" },
+    { name: "zip",  type: "int" }
+])
+
+ffi.define_struct("Person", [
+    { name: "name", type: "string" },
+    { name: "age",  type: "int" },
+    { name: "addr", type: "struct:Address" }
 ])
 ```
 

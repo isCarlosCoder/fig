@@ -110,7 +110,11 @@ use "ffi"
 # 1. Carregar a biblioteca (usar `lib_ext`/`lib_name` torna o código portátil)
 let lib = ffi.load("./" + ffi.lib_name("mylib"))
 
-# 2. Resolver os símbolos (funções)
+# 2. Resolver os símbolos (funções)# como alternativa você pode declarar um wrapper para os argumentos:
+# let Point = ffi.struct("Point", [ {name: "x", type: "int"}, {name:"y", type:"int"} ])
+# let add = ffi.sym(lib, "add", "int", [Point, Point])
+# let p = Point.new(1,2)
+# print(ffi.call(add, p, p))
 let add = ffi.sym(lib, "add", "int", ["int", "int"])
 let multiply = ffi.sym(lib, "multiply", "double", ["double", "double"])
 let greet = ffi.sym(lib, "greet", "void", ["string"])
