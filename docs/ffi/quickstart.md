@@ -95,22 +95,23 @@ Crie um arquivo `programa.fig`:
 ```fig
 use "ffi"
 
-// 1. Carregar a biblioteca
-let lib = ffi.load("./libmylib.so")
+# 1. Carregar a biblioteca
+# 1. Carregar a biblioteca (usar `lib_ext`/`lib_name` torna o código portátil)
+let lib = ffi.load("./" + ffi.lib_name("mylib"))
 
-// 2. Resolver os símbolos (funções)
+# 2. Resolver os símbolos (funções)
 let add = ffi.sym(lib, "add", "int", ["int", "int"])
 let multiply = ffi.sym(lib, "multiply", "double", ["double", "double"])
 let greet = ffi.sym(lib, "greet", "void", ["string"])
 
-// 3. Chamar as funções
+# 3. Chamar as funções
 let soma = ffi.call(add, 10, 32)
-print("10 + 32 = " + soma)  // 10 + 32 = 42
+print("10 + 32 = " + soma)  # 10 + 32 = 42
 
 let produto = ffi.call(multiply, 3.14, 2.0)
-print("3.14 * 2 = " + produto)  // 3.14 * 2 = 6.28
+print("3.14 * 2 = " + produto)  # 3.14 * 2 = 6.28
 
-ffi.call(greet, "Fig")  // Olá, Fig!
+ffi.call(greet, "Fig")  # Olá, Fig!
 ```
 
 ---
@@ -131,6 +132,25 @@ Olá, Fig!
 
 ---
 
+## Exemplo com chamadas dinâmicas: `call_raw`
+
+Se você precisa montar a lista de argumentos em tempo de execução (por exemplo,
+um número variável de parâmetros), use `ffi.call_raw`. Ele aceita um array de
+valores e encaminha o JSON ao helper exatamente como está. O resultado é o
+valor bruto retornado pelo helper.
+
+```fig
+use "ffi"
+
+let lib = ffi.load("./" + ffi.lib_name("mylib"))
+let sym = ffi.sym(lib, "add", "int", ["int", "int"])
+
+# apesar de ser apenas um exemplo simples, os argumentos são passados como
+# array e `call_raw` devolve o mesmo que o helper recebeu:
+print(ffi.call_raw(sym, [10, 20]))   # 30
+```
+
+
 ## Exemplo com memória: alloc, write, read, free
 
 Para operações que exigem gerenciamento manual de memória:
@@ -140,17 +160,17 @@ use "ffi"
 
 let lib = ffi.load("./libmylib.so")
 
-// Alocar 64 bytes de memória no helper
+# Alocar 64 bytes de memória no helper
 let mem = ffi.alloc(64)
 
-// Escrever dados (base64-encoded)
-ffi.mem_write(mem, 0, "SGVsbG8gRkZJ")  // "Hello FFI" em base64
+# Escrever dados (base64-encoded)
+ffi.mem_write(mem, 0, "SGVsbG8gRkZJ")  # "Hello FFI" em base64
 
-// Ler dados de volta
+# Ler dados de volta
 let data = ffi.mem_read(mem, 0, 9)
-print(data)  // "SGVsbG8gRkZJ"
+print(data)  # "SGVsbG8gRkZJ"
 
-// Liberar memória
+# Liberar memória
 ffi.free(mem)
 ```
 
@@ -161,13 +181,13 @@ ffi.free(mem)
 ```fig
 use "ffi"
 
-// Copiar uma string Fig para memória C
+# Copiar uma string Fig para memória C
 let str_id = ffi.strdup("Olá mundo")
 
-// O str_id pode ser passado para funções C que esperam char*
-// ...
+# O str_id pode ser passado para funções C que esperam char*
+# ...
 
-// Liberar a string quando não for mais necessária
+# Liberar a string quando não for mais necessária
 ffi.free(str_id)
 ```
 
@@ -176,6 +196,12 @@ ffi.free(str_id)
 ## Troubleshooting
 
 ### Erros comuns e seus códigos
+
+A maioria dos comandos internos (`load`, `sym`, `call`, `alloc`, `mem_write`)
+geram códigos de erro padronizados. Se você estiver escrevendo scripts de
+debug ou usando `ffi.helper_cmd`, lembre‑se de que quaisquer mensagens retornadas
+serão passadas diretamente pelo helper—não há tradução adicional.
+
 
 | Erro | Código | Causa provável | Solução |
 |------|--------|----------------|---------|

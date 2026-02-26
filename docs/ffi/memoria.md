@@ -27,49 +27,59 @@ O módulo FFI dá acesso direto à memória nativa. É responsabilidade do progr
 
 **Regra fundamental:** Quem aloca, libera.
 
-- `ffi.alloc()` e `ffi.strdup()` alocam no heap C, via o helper.
-- O ID retornado é um handle opaco (`"m-1"`, `"m-2"`, etc.).
-- `ffi.free(id)` libera a memória. Após o free, o ID é inválido.
-- Usar um ID após free resulta em `ERR_INVALID_MEM_ID`.
+Abaixo há um resumo rápido de quem é responsável por cada alocação:
+
+| Alocação | Liberada por | Método de liberação |
+|----------|--------------|---------------------|
+| `ffi.alloc()` | código Fig | `ffi.free(memId)` |
+| `ffi.strdup()` | código Fig | `ffi.free_string(memId)` (ou `ffi.free(memId)`) |
+| valor retornado por `ffi.call()` | helper (automático) | não está disponível para o usuário |
+
+- Os IDs retornados (`"m-1"`, `"m-2"`, ...) são opacos e não devem ser
+  modificados.
+- Após chamar `ffi.free()` ou `ffi.free_string()`, o ID torna-se inválido e
+  qualquer uso subsequente gera `ERR_INVALID_MEM_ID`.
 
 ## Exemplo: alloc + write + read
 
-```js
+```fig
 use "ffi"
 
-// Alocar 256 bytes
+# Alocar 256 bytes
 var buf = ffi.alloc(256)
 
-// Escrever dados (base64 encoded)
-ffi.mem_write(buf, "SGVsbG8gRmlnIQ==")  // "Hello Fig!" em base64
+# Escrever dados (base64 encoded)
+ffi.mem_write(buf, "SGVsbG8gRmlnIQ==")  # "Hello Fig!" em base64
 
-// Ler 10 bytes a partir do offset 0
+# Ler 10 bytes a partir do offset 0
 var data = ffi.mem_read(buf, 0, 10)
-print(data)  // base64 dos bytes lidos
+print(data)  # base64 dos bytes lidos
 
-// Liberar
+# Liberar
 ffi.free(buf)
 ```
 
 ## Exemplo: strdup
 
-```js
+```fig
 use "ffi"
 
-// Duplicar string para memória C
+# Duplicar string para memória C
 var cstr = ffi.strdup("Hello, FFI!")
 
-// cstr agora é um ponteiro para uma C string no heap
-// Pode ser passado para funções C que esperam char*
+# cstr agora é um ponteiro para uma C string no heap
+# Pode ser passado para funções C que esperam char*
 var lib = ffi.load("./libmylib.so")
 var process = ffi.sym(lib, "process_string", "int", ["string"])
 ffi.call(process, cstr)
-
-// Liberar quando não precisar mais
+# Liberar quando não precisar mais
 ffi.free(cstr)
 ```
 
 ## Erros comuns
+
+Veja também [erros.md](erros.md) para a lista completa de códigos e suas
+mensagens.
 
 | Erro | Causa | Solução |
 |------|-------|---------|

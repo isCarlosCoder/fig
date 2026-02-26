@@ -92,6 +92,24 @@ Tentar carregar uma biblioteca fora da lista resulta em erro `ERR_DLOPEN_FAILED`
 | `max_loaded_libs` | Máximo de bibliotecas carregadas simultaneamente | 10 |
 | `call_timeout` | Timeout por chamada (ms) | 3000 |
 
+### Inspecionando o estado em tempo de execução
+
+O builtin `ffi.sandbox_status()` retorna um objeto com os limites
+configurados e os contadores atuais (bibliotecas carregadas, alocações
+ativas, reinícios do helper). Isso é útil para monitorar ou alertar em scripts
+Fig.
+
+```fig
+use "ffi"
+let st = ffi.sandbox_status()
+print("loaded libs", st.loaded_libs)
+print("live allocs", st.live_allocs)
+```
+
+Os campos retornados são idênticos aos definidos em `[ffi.sandbox]` mais os
+contadores:
+`loaded_libs`, `live_allocs`, `restarts`.
+
 ## Nível de log para auditoria
 
 Use `--log-level info` no helper para auditar todas as operações:

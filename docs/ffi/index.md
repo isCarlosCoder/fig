@@ -52,24 +52,38 @@ O FFI do Fig utiliza um **processo auxiliar** (`ffi-helper`) que age como ponte 
 
 | Função | Descrição |
 |--------|-----------|
-| `ffi.load(path)` | Carrega uma biblioteca nativa (`.so`, `.dylib`, `.dll`) e retorna um handle |
+| `ffi.lib_ext()` | Retorna a extensão de biblioteca da plataforma (`".so"`, `".dylib"` ou `".dll"`) |
+| `ffi.lib_name(base)` | Constrói um nome de biblioteca (`lib<base>.so` / `.dylib` / `<base>.dll`) |
+| `ffi.load(path)` | Carrega uma biblioteca nativa e retorna um handle |
 | `ffi.sym(handle, name, retType, [argTypes])` | Resolve um símbolo e registra `argTypes` como array de strings |
 | `ffi.call(sym, ...args)` | Invoca uma função nativa previamente resolvida com `sym()` |
+| `ffi.call_raw(sym, argsArray)` | Envia um array de argumentos direto ao helper e retorna o valor cru |
+| `ffi.helper_cmd(cmd, [data])` | Envia comando genérico ao helper; `data` é opcional |
+| `ffi.sandbox_status()` | Retorna objeto com contadores e configuração de sandbox |
 | `ffi.alloc(size)` | Aloca `size` bytes de memória no espaço do helper e retorna um `mem_id` |
 | `ffi.free(mem_id)` | Libera memória previamente alocada com `alloc()` |
 | `ffi.strdup(str)` | Copia uma string Fig para memória C no helper e retorna um `mem_id` |
+| `ffi.free_string(mem_id)` | Alias de `ffi.free` para strings duplicadas |
 | `ffi.mem_write(mem_id, offset, data)` | Escreve dados binários (base64) em uma região de memória alocada |
 | `ffi.mem_read(mem_id, offset, length)` | Lê dados binários de uma região de memória e retorna em base64 |
+| `ffi.bytes_from_string(str)` | Converte string para objeto bytes |
+| `ffi.bytes_to_string(bytesObj)` | Converte objeto bytes em string |
+| `ffi.bytes_from_array(arr)` | Cria objeto bytes de array numérico |
+| `ffi.bytes_to_array(bytesObj)` | Converte objeto bytes em array numérico |
 
 ### Exemplo mínimo
 
 ```fig
 use "ffi"
 
-let lib = ffi.load("./libmylib.so")
+# exemplo usando caminho portátil
+let lib = ffi.load("./" + ffi.lib_name("mylib"))
 let add = ffi.sym(lib, "add", "int", ["int", "int"])
 let resultado = ffi.call(add, 2, 3)
-print(resultado)  // 5
+print(resultado)  # 5
+
+# chamada dinâmica ilustrativa
+print(ffi.call_raw(add, [2, 3]))  # 5
 ```
 
 ---

@@ -207,6 +207,14 @@ let result = ffi.call(sym, {
 })
 ```
 
+### Erros comuns com structs
+
+- `call: unknown struct schema: X` — o schema `X` não foi definido pelo `ffi.define_struct`.
+- `missing struct field: Person.age` — o objeto passado não contém um campo esperado.
+- `call: arg N expects TYPE, got <value>` — valor de campo tem tipo incorreto (por exemplo, string em um campo `int`).
+
+Essas mensagens são geradas pelo client em Go antes do JSON ser enviado ao helper,
+então elas aparecem imediatamente no runtime Fig.
 A função C correspondente recebe os campos expandidos:
 
 ```c
@@ -341,25 +349,39 @@ Callbacks têm timeout fixo de **2 segundos**.
 
 ## Chamadas dinâmicas com `call_raw`
 
-`call_raw` aceita os argumentos como array, útil para chamadas dinâmicas:
+`call_raw` aceita os argumentos como **array** e os transmite ao helper sem
+nenhum processamento adicional. Isso é útil quando você constrói a lista de
+parâmetros em tempo de execução ou quando não sabe de antemão quantos argumentos
+serão necessários. O valor retornado é literalmente o que o helper devolver ao
+runtime, portanto você pode inspecionar a resposta bruta sem conversão.
 
 ```js
 let result = ffi.call_raw(sym_id, [10, 20, 30])
 ```
+se o helper apenas ecoar os argumentos, `result` será [10, 20, 30]
+
 
 ## Comandos diretos ao helper
 
-`helper_cmd` envia um comando genérico ao helper process:
+`helper_cmd` envia um comando genérico ao helper process. O segundo parâmetro
+`data` é opcional; ele pode ser um número, string, array ou objeto e será incluído
+na mensagem JSON. Quando omitido, apenas o nome do comando é enviado. O helper
+retorna **exatamente** o JSON fornecido pelo processo auxiliar, sem nenhuma
+conversão adicional.
 
 ```js
-let resp = ffi.helper_cmd("ping", nil)   # { ok: true, resp: "pong" }
+let resp = ffi.helper_cmd("ping")            # { ok: true, resp: "pong" }
+let info = ffi.helper_cmd("stats", { })      # depende do que o helper suporta
 ```
+
+> Dica: `helper_cmd` é especialmente útil em scripts de debug ou para acionar
+> funcionalidades específicas do helper que ainda não possuem builtins em Fig.
 
 ## Testando a conexão
 
 ```js
 let r = ffi.ping()
-print(r)   # "pong"
+print(r)
 ```
 
 ## Referência de funções

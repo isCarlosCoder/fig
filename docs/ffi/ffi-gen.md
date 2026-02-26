@@ -30,8 +30,11 @@ ffi-gen -init meu_projeto
 
 ```toml
 [library]
-name = "mymath"      # Nome base da biblioteca
-# path = "/opt/lib"  # Caminho explícito (opcional, sobrepõe name)
+name = "mymath"      # Nome base da biblioteca; o código gerado usará
+                       # `ffi.lib_name("mymath")` para montar o nome final.
+# path = "/opt/lib"  # Caminho explícito (opcional, sobrepõe name).
+                       # Quando presente, `ffi.lib_ext()` é anexado automaticamente
+                       # ao final do caminho.
 
 [[structs]]
 name = "Point"
