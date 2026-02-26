@@ -17,6 +17,22 @@ ffi-gen -init meu_projeto
 
 ## Flags
 
+When run with `-init`, `ffi-gen` creates a small project directory containing:
+
+```
+<name>/
+├── fig.toml            # config with FFI enabled
+├── <name>.ffi.def.toml # example IDL file
+├── <name>.c            # C source code with sample functions
+├── Makefile            # build the shared library & generate bindings
+├── main.fig            # Fig example showing both direct use and generated wrappers
+└── README.md           # instructions for building & running the example
+```
+
+The generated README explains the three-step workflow: build C library, run
+`ffi-gen` and execute with `fig run`.
+
+
 | Flag | Descrição |
 |------|-----------|
 | `-input <arquivo>` | Caminho para o `.ffi.def.toml` de entrada |
@@ -46,11 +62,16 @@ fields = [
 [[functions]]
 name = "add"           # Nome da função Fig gerada
 symbol = "add"         # Nome do símbolo C (padrão: igual a name)
-return = "int"         # Tipo de retorno
+return = "int"         # Tipo de retorno (se omitido, assume "int")
 args = ["int", "int"]  # Tipos dos argumentos
 ```
 
 ## Tipos suportados
+
+O gerador aceita apenas tipos conhecidos pela implementação FFI. Caso você
+especifique um tipo inválido (`pointer`, `char`, etc.) a ferramenta vai falhar
+com uma mensagem clara.
+
 
 | Tipo | Descrição |
 |------|-----------|
@@ -75,7 +96,9 @@ O ffi-gen agora gera:
    # C: int add(int a, int b)
    ```
 
-2. **argTypes sempre incluídos** no `ffi.sym()`:
+2. **argTypes sempre incluídos** no `ffi.sym()`: o gerador põe a lista completa de
+   tipos como quarto argumento mesmo que todos sejam iguais. Isso evita erros de
+   coerção/parse no helper e é necessário para structs ou assinaturas mistas.
    ```js
    let __sym_add = ffi.sym(__lib, "add", "int", ["int", "int"])
    ```

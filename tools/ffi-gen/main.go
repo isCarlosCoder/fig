@@ -306,10 +306,12 @@ func scaffoldProject(name string) error {
 	// fig.toml
 	figToml := `[project]
 name = "` + baseName + `"
+type = 'application'
+main = './main.fig'
 
 [ffi]
 enabled = true
-helper = "./ffi-helper"
+helper = "ffi-helper" # Set this to the path of your ffi-helper binary
 call_timeout = 5000
 `
 	if err := os.WriteFile(filepath.Join(dir, "fig.toml"), []byte(figToml), 0644); err != nil {
@@ -412,11 +414,14 @@ print(ffi.call(greet_sym, "Fig"))    # Hello, Fig!
 1. Build the shared library:
 ` + "```bash\ngcc -shared -fPIC -o lib" + baseName + "$(ffi.lib_ext) " + baseName + ".c\n```" + `
 
-2. Generate Fig bindings:
+2. Set your ffi-helper path in fig.toml:
+` + "```toml\n[ffi]\nhelper = \"path/to/ffi-helper\"\n```\n" + `
+
+3. Generate Fig bindings:
 ` + "```bash\ngo run ./tools/ffi-gen -input " + baseName + ".ffi.def.toml -output bindings.fig\n```" + `
 
-3. Run:
-` + "```bash\nfig main.fig\n```" + `
+4. Run:
+` + "```bash\nfig run main.fig\n```" + `
 
 ## Files
 

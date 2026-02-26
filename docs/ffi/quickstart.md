@@ -15,6 +15,17 @@
 
 ## Passo 1 — Criar uma biblioteca C
 
+> **Dica:** se você já tem um arquivo `ffi.def.toml`, pode gerar o código Fig
+automaticamente com `ffi-gen` (veja [documentação](ffi-gen.md)). O comando abaixo
+inicia um projeto de exemplo:
+>
+> ```bash
+> go run ./tools/ffi-gen -init meu_projeto
+> ```
+>
+> que criará estrutura com `fig.toml`, `.ffi.def.toml`, `Makefile`, etc.
+
+
 Crie um arquivo `mylib.c` com uma função simples:
 
 ```c
