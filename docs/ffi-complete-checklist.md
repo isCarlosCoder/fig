@@ -46,7 +46,7 @@ Objetivo: listar tudo que falta implementar, testar e documentar para que Fig co
     - Descrição: propagar cancelamentos/timeouts de Fig→helper→C e de C→Fig; evitar deadlocks.
     - Critérios: chamadas bloqueantes têm mecanismo de cancel; testável; configurações via fig.toml.
     - Testes: chamadas que bloqueiam e são canceladas pelo lado Fig; validar retorno e limpeza.
-    - **Status:** `call_timeout` configurável no `fig.toml` (padrão 3s). Callback timeout fixo de 2s. TestFfiCallTimeout passa.
+    - **Status:** `call_timeout` configurável no `fig.toml` (padrão 3s; 0 = sem limite). Callback timeout fixo de 2s. TestFfiCallTimeout passa.
 
 6.  ✅ **Testes de estabilidade e concorrência** — P0, M — **IMPLEMENTADO**
     - Descrição: suite de stress que valida grandes cargas, race conditions e falhas parciais (C crash, helper crash).

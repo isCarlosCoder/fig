@@ -135,7 +135,7 @@ func readFfiConfig() (bool, string, string, int, error) {
 		Ffi struct {
 			Enabled     bool   `toml:"enabled"`
 			Helper      string `toml:"helper"`
-			CallTimeout int    `toml:"call_timeout"` // milliseconds, 0 = default (3000)
+			CallTimeout *int   `toml:"call_timeout"` // milliseconds: 0 = unlimited, omitted = default (3000)
 		} `toml:"ffi"`
 	}
 	data, err := os.ReadFile(p)
@@ -146,7 +146,11 @@ func readFfiConfig() (bool, string, string, int, error) {
 		return false, "", "", 0, err
 	}
 	projectRoot := filepath.Dir(p)
-	return cfg.Ffi.Enabled, cfg.Ffi.Helper, projectRoot, cfg.Ffi.CallTimeout, nil
+	var callTimeoutMs int = -1 // sentinel meaning "not specified, use runtime default"
+	if cfg.Ffi.CallTimeout != nil {
+		callTimeoutMs = *cfg.Ffi.CallTimeout
+	}
+	return cfg.Ffi.Enabled, cfg.Ffi.Helper, projectRoot, callTimeoutMs, nil
 }
 
 // toEnvironmentValue converts a JSON-like response from the helper into an environment.Value
@@ -382,7 +386,7 @@ func init() {
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("load(path) expects a string")
 			}
-			en, helper, projectRoot, _, err := readFfiConfig()
+			en, helper, projectRoot, callTimeoutMs, err := readFfiConfig()
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot read fig.toml: %v", err)
 			}
@@ -404,6 +408,14 @@ func init() {
 				}
 			}
 			hc, err := getHelperForProject(projectRoot, helper)
+			// apply timeout config if present
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
+			}
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot start helper: %v", err)
 			}
@@ -444,7 +456,7 @@ func init() {
 					argTypes = append(argTypes, v.Str)
 				}
 			}
-			en, helper, projectRoot, _, err := readFfiConfig()
+			en, helper, projectRoot, callTimeoutMs, err := readFfiConfig()
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot read fig.toml: %v", err)
 			}
@@ -455,6 +467,14 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("no ffi.helper configured in fig.toml; run 'fig setup-ffi'")
 			}
 			hc, err := getHelperForProject(projectRoot, helper)
+			// apply timeout config if present
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
+			}
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot start helper: %v", err)
 			}
@@ -491,12 +511,24 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("no ffi.helper configured in fig.toml; run 'fig setup-ffi'")
 			}
 			hc, err := getHelperForProject(projectRoot, helper)
+			// apply timeout config if present
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
+			}
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot start helper: %v", err)
 			}
-			// apply configurable call timeout if set in fig.toml
-			if callTimeoutMs > 0 {
-				hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+			// apply configurable call timeout if provided in fig.toml
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
 			}
 			// marshal args after symbol id
 			var mar []interface{}
@@ -673,7 +705,7 @@ func init() {
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("helper_cmd: cmd must be string")
 			}
-			en, helper, projectRoot, _, err := readFfiConfig()
+			en, helper, projectRoot, callTimeoutMs, err := readFfiConfig()
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot read fig.toml: %v", err)
 			}
@@ -684,6 +716,14 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("no ffi.helper configured in fig.toml; run 'fig setup-ffi'")
 			}
 			hc, err := getHelperForProject(projectRoot, helper)
+			// apply timeout config if present
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
+			}
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot start helper: %v", err)
 			}
@@ -805,7 +845,7 @@ func init() {
 			if sz <= 0 {
 				return environment.NewNil(), fmt.Errorf("alloc: size must be > 0")
 			}
-			_, helper, projectRoot, _, err := readFfiConfig()
+			_, helper, projectRoot, callTimeoutMs, err := readFfiConfig()
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot read fig.toml: %v", err)
 			}
@@ -818,6 +858,14 @@ func init() {
 				}
 			}
 			hc, err := getHelperForProject(projectRoot, helper)
+			// apply timeout config if present
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
+			}
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot start helper: %v", err)
 			}
@@ -843,11 +891,19 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("free: invalid mem object")
 			}
 			mid := v.Str
-			_, helper, projectRoot, _, err := readFfiConfig()
+			_, helper, projectRoot, callTimeoutMs, err := readFfiConfig()
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot read fig.toml: %v", err)
 			}
 			hc, err := getHelperForProject(projectRoot, helper)
+			// apply timeout config if present
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
+			}
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot start helper: %v", err)
 			}
@@ -867,7 +923,7 @@ func init() {
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("strdup: arg must be string")
 			}
-			_, helper, projectRoot, _, err := readFfiConfig()
+			_, helper, projectRoot, callTimeoutMs, err := readFfiConfig()
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot read fig.toml: %v", err)
 			}
@@ -880,6 +936,14 @@ func init() {
 				}
 			}
 			hc, err := getHelperForProject(projectRoot, helper)
+			// apply timeout config if present
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
+			}
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot start helper: %v", err)
 			}
@@ -906,11 +970,19 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("free_string: invalid mem object")
 			}
 			mid := v.Str
-			_, helper, projectRoot, _, err := readFfiConfig()
+			_, helper, projectRoot, callTimeoutMs, err := readFfiConfig()
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot read fig.toml: %v", err)
 			}
 			hc, err := getHelperForProject(projectRoot, helper)
+			// apply timeout config if present
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
+			}
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot start helper: %v", err)
 			}
@@ -947,11 +1019,19 @@ func init() {
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("mem_write: offset must be number")
 			}
-			_, helper, projectRoot, _, err := readFfiConfig()
+			_, helper, projectRoot, callTimeoutMs, err := readFfiConfig()
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot read fig.toml: %v", err)
 			}
 			hc, err := getHelperForProject(projectRoot, helper)
+			// apply timeout config if present
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
+			}
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot start helper: %v", err)
 			}
@@ -982,11 +1062,19 @@ func init() {
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("mem_read: len must be number")
 			}
-			_, helper, projectRoot, _, err := readFfiConfig()
+			_, helper, projectRoot, callTimeoutMs, err := readFfiConfig()
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot read fig.toml: %v", err)
 			}
 			hc, err := getHelperForProject(projectRoot, helper)
+			// apply timeout config if present
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
+			}
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot start helper: %v", err)
 			}
@@ -1087,7 +1175,7 @@ func init() {
 					return environment.NewNil(), fmt.Errorf("unsupported arg type for call_raw: %v", args[i].Type)
 				}
 			}
-			en, helper, projectRoot, _, err := readFfiConfig()
+			en, helper, projectRoot, callTimeoutMs, err := readFfiConfig()
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot read fig.toml: %v", err)
 			}
@@ -1098,6 +1186,14 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("no ffi.helper configured in fig.toml; run 'fig setup-ffi'")
 			}
 			hc, err := getHelperForProject(projectRoot, helper)
+			// apply timeout config if present
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
+			}
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot start helper: %v", err)
 			}
@@ -1114,7 +1210,7 @@ func init() {
 
 		// ping helper (starts it transiently and asks for pong)
 		fn("ping", func(args []environment.Value) (environment.Value, error) {
-			en, helper, projectRoot, _, err := readFfiConfig()
+			en, helper, projectRoot, callTimeoutMs, err := readFfiConfig()
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot read fig.toml: %v", err)
 			}
@@ -1125,6 +1221,14 @@ func init() {
 				return environment.NewNil(), fmt.Errorf("no ffi.helper configured in fig.toml; run 'fig setup-ffi'")
 			}
 			hc, err := getHelperForProject(projectRoot, helper)
+			// apply timeout config if present
+			if callTimeoutMs >= 0 {
+				if callTimeoutMs == 0 {
+					hc.callTimeout = 0
+				} else {
+					hc.callTimeout = time.Duration(callTimeoutMs) * time.Millisecond
+				}
+			}
 			if err != nil {
 				return environment.NewNil(), fmt.Errorf("cannot start helper: %v", err)
 			}

@@ -110,7 +110,7 @@ func startHelperOnce(path string) (*helperClient, error) {
 	}()
 	// small delay to let helper initialize
 	time.Sleep(20 * time.Millisecond)
-	hc := &helperClient{cmd: cmd, stdin: in, stdout: bufio.NewReader(out), stderr: &stderrBuf, pending: map[string]chan map[string]interface{}{}}
+	hc := &helperClient{cmd: cmd, stdin: in, stdout: bufio.NewReader(out), stderr: &stderrBuf, pending: map[string]chan map[string]interface{}{}, callTimeout: -1}
 	go hc.readLoop()
 	return hc, nil
 }
@@ -331,7 +331,7 @@ func startHelperDaemon(path string, sockPath string) (*helperClient, error) {
 		// not ready yet
 		time.Sleep(20 * time.Millisecond)
 	}
-	hc := &helperClient{cmd: cmd, stdin: nil, stdout: bufio.NewReader(conn), stderr: &stderrBuf, conn: conn, pending: map[string]chan map[string]interface{}{}}
+	hc := &helperClient{cmd: cmd, stdin: nil, stdout: bufio.NewReader(conn), stderr: &stderrBuf, conn: conn, pending: map[string]chan map[string]interface{}{}, callTimeout: -1}
 	go hc.readLoop()
 	return hc, nil
 }
@@ -400,10 +400,11 @@ func (h *helperClient) stderrString() string {
 
 // getCallTimeout returns the configured timeout or the 3s default
 func (h *helperClient) getCallTimeout() time.Duration {
-	if h.callTimeout > 0 {
-		return h.callTimeout
+	// negative value means "no configuration yet"; fall back to default
+	if h.callTimeout < 0 {
+		return 3 * time.Second
 	}
-	return 3 * time.Second
+	return h.callTimeout
 }
 
 func (h *helperClient) Stop() error {
@@ -449,10 +450,16 @@ func (h *helperClient) call(req map[string]interface{}) (map[string]interface{},
 		}
 	}
 
+	timeout := h.getCallTimeout()
+	if timeout == 0 {
+		// 0 duration means no timeout (infinite)
+		resp := <-ch
+		return resp, nil
+	}
 	select {
 	case resp := <-ch:
 		return resp, nil
-	case <-time.After(h.getCallTimeout()):
+	case <-time.After(timeout):
 		return nil, fmt.Errorf("timeout waiting for helper response; stderr: %s", h.stderrString())
 	}
 }

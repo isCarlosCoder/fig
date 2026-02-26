@@ -44,6 +44,7 @@ allowed_libs = ["./libs/*.so", "/usr/lib/libsqlite3.so"]
 block_system_libs = false
 
 # Timeout de chamada (ms) — proteção contra loops infinitos
+# 0 = sem limite (usar com cuidado); omitir usa o padrão de 3000ms
 call_timeout = 5000
 
 # Limite de memória alocável (bytes) — 0 = sem limite

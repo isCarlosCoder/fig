@@ -312,6 +312,7 @@ main = './main.fig'
 [ffi]
 enabled = true
 helper = "ffi-helper" # Set this to the path of your ffi-helper binary
+# call_timeout in milliseconds (0 = unlimited, omit for default 3000)
 call_timeout = 5000
 `
 	if err := os.WriteFile(filepath.Join(dir, "fig.toml"), []byte(figToml), 0644); err != nil {

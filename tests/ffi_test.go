@@ -736,6 +736,38 @@ func TestFfiCallTimeout(t *testing.T) {
 	}
 }
 
+func TestFfiCallNoTimeout(t *testing.T) {
+	builtins.StopAllHelpers()
+	// build helper and project
+	binDir := t.TempDir()
+	bin := filepath.Join(binDir, "ffi-helper")
+	root := repoRootForTest(t)
+	cmd := exec.Command("go", "build", "-o", bin, "./tools/ffi-helper")
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build helper: %v (%s)", err, string(out))
+	}
+	proj := t.TempDir()
+	fig := filepath.Join(proj, "fig.toml")
+	cfg := fmt.Sprintf("[ffi]\nenabled = true\nhelper = %q\ncall_timeout = 0\n", bin)
+	if err := os.WriteFile(fig, []byte(cfg), 0644); err != nil {
+		t.Fatalf("cannot write fig.toml: %v", err)
+	}
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	os.Chdir(proj)
+
+	mod := builtins.Get("ffi")
+	helpCmd := mod.Entries["helper_cmd"]
+	if helpCmd.Type != environment.BuiltinFnType {
+		t.Fatalf("expected helper_cmd builtin")
+	}
+	// this should not error despite sleeping longer than default
+	if _, err := helpCmd.Builtin([]environment.Value{environment.NewString("sleep"), environment.NewNumber(5000)}); err != nil {
+		t.Fatalf("unexpected error when timeout is unlimited: %v", err)
+	}
+}
+
 func TestFfiHelperCrashRestart(t *testing.T) {
 	builtins.StopAllHelpers()
 	// build helper and project
