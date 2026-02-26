@@ -57,17 +57,17 @@ func TestFfiGenStructs(t *testing.T) {
 	data, _ := os.ReadFile(outPath)
 	code := string(data)
 
-	if !strings.Contains(code, `ffi.define_struct("Point"`) {
-		t.Error("missing define_struct for Point")
+	if !strings.Contains(code, `let Point = ffi.struct("Point"`) {
+		t.Error("missing wrapper variable declaration for Point")
 	}
-	if !strings.Contains(code, `ffi.define_struct("Rect"`) {
-		t.Error("missing define_struct for Rect")
+	if !strings.Contains(code, `let Rect = ffi.struct("Rect"`) {
+		t.Error("missing wrapper variable declaration for Rect")
 	}
 	if !strings.Contains(code, `"struct:Point"`) {
 		t.Error("missing nested struct reference in Rect")
 	}
-	if !strings.Contains(code, `["struct:Rect"]`) {
-		t.Error("missing arg_types for area function")
+	if !strings.Contains(code, `[Rect]`) {
+		t.Error("missing arg_types reference to Rect variable for area function")
 	}
 }
 

@@ -194,11 +194,12 @@ func Generate(def *DefFile) string {
 		b.WriteString(fmt.Sprintf("let __lib = ffi.load(\"./\" + ffi.lib_name(\"%s\"))\n\n", libName))
 	}
 
-	// Struct definitions
+	// Struct definitions (use high-level wrapper API)
 	if len(def.Structs) > 0 {
 		b.WriteString("# --- Struct definitions ---\n\n")
 		for _, s := range def.Structs {
-			b.WriteString(fmt.Sprintf("ffi.define_struct(\"%s\", [\n", s.Name))
+			// declare wrapper variable with same name as struct
+			b.WriteString(fmt.Sprintf("let %s = ffi.struct(\"%s\", [\n", s.Name, s.Name))
 			for i, f := range s.Fields {
 				comma := ","
 				if i == len(s.Fields)-1 {
@@ -229,13 +230,20 @@ func Generate(def *DefFile) string {
 			// symbol variable
 			symVar := "__sym_" + f.Name
 
-			// Always generate with argTypes for type safety
+			// Always generate with argTypes for type safety; if an arg is a struct
+			// and we defined a wrapper variable, reference it directly instead of a
+			// literal string.
 			argTypesLit := "["
 			for i, a := range f.Args {
 				if i > 0 {
 					argTypesLit += ", "
 				}
-				argTypesLit += fmt.Sprintf("\"%s\"", a)
+				if strings.HasPrefix(a, "struct:") {
+					sn := a[7:]
+					argTypesLit += sn // uses variable name
+				} else {
+					argTypesLit += fmt.Sprintf("\"%s\"", a)
+				}
 			}
 			argTypesLit += "]"
 			b.WriteString(fmt.Sprintf("let %s = ffi.sym(__lib, \"%s\", \"%s\", %s)\n", symVar, sym, ret, argTypesLit))
