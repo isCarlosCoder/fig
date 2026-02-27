@@ -119,6 +119,47 @@ char* ffi_call_str_fn4_siid(void* fn, char* a, int b, int c, double d) {
     return ((str_fn4_siid)fn)(a,b,c,d);
 }
 
+// === pointer-return wrappers ===
+// treat struct pointers as opaque void* values
+
+typedef void* (*ptr_fn0)(void);
+typedef void* (*ptr_fn1_int)(int);
+typedef void* (*ptr_fn1_str)(const char*);
+
+void* ffi_call_ptr_fn0(void* fn) {
+    return ((ptr_fn0)fn)();
+}
+void* ffi_call_ptr_fn1_int(void* fn, int a) {
+    return ((ptr_fn1_int)fn)(a);
+}
+void* ffi_call_ptr_fn1_str(void* fn, char* a) {
+    return ((ptr_fn1_str)fn)(a);
+}
+
+// support two-argument pointer-return where first arg double second string
+typedef void* (*ptr_fn2_double_str)(double, const char*);
+void* ffi_call_ptr_fn2_double_str(void* fn, double a, char* b) {
+    return ((ptr_fn2_double_str)fn)(a, b);
+}
+
+// === pointer-argument wrappers ===
+// these allow passing a previously-returned struct pointer back into a C call
+
+typedef int (*int_fn1_ptr)(void*);
+int ffi_call_int_fn1_ptr(void* fn, void* p) {
+    return ((int_fn1_ptr)fn)(p);
+}
+
+typedef double (*double_fn1_ptr)(void*);
+double ffi_call_double_fn1_ptr(void* fn, void* p) {
+    return ((double_fn1_ptr)fn)(p);
+}
+
+typedef char* (*str_fn1_ptr)(void*);
+char* ffi_call_str_fn1_ptr(void* fn, void* p) {
+    return ((str_fn1_ptr)fn)(p);
+}
+
 // forward to Go-exported function
 extern char* call_cb_from_go(const char* cbid, const char* arg);
 

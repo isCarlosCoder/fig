@@ -60,7 +60,7 @@ O FFI do Fig utiliza um **processo auxiliar** (`ffi-helper`) que age como ponte 
 | `ffi.call_raw(sym, argsArray)` | Envia um array de argumentos direto ao helper e retorna o valor cru |
 | `ffi.helper_cmd(cmd, [data])` | Envia comando genérico ao helper; `data` é opcional |
 | `ffi.sandbox_status()` | Retorna objeto com contadores e configuração de sandbox |
-| `ffi.struct(name, fields)` | Cria wrapper tipo FFI com métodos `new/validate/flatten` |
+| `ffi.struct_(name, fields)` | Cria wrapper tipo FFI com métodos `new/validate/flatten` |
 | `ffi.alloc(size)` | Aloca `size` bytes de memória no espaço do helper e retorna um `mem_id` |
 | `ffi.free(mem_id)` | Libera memória previamente alocada com `alloc()` |
 | `ffi.strdup(str)` | Copia uma string Fig para memória C no helper e retorna um `mem_id` |
@@ -71,6 +71,12 @@ O FFI do Fig utiliza um **processo auxiliar** (`ffi-helper`) que age como ponte 
 | `ffi.bytes_to_string(bytesObj)` | Converte objeto bytes em string |
 | `ffi.bytes_from_array(arr)` | Cria objeto bytes de array numérico |
 | `ffi.bytes_to_array(bytesObj)` | Converte objeto bytes em array numérico |
+
+> **Nota:** se `retType` for `struct:Name`, o helper espera que a função
+> retorne um **ponteiro** para o struct (`struct Name*`) e retorna um objeto
+> marcador `{__struct__: "Name", __ptrid__: "p-..."}`. Esse marcador pode ser
+> repassado para outras chamadas que aceitem `struct:Name` em `arg_types` e o
+> runtime tratará o ponteiro corretamente.
 
 ### Exemplo mínimo
 

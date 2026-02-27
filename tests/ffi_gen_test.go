@@ -57,10 +57,10 @@ func TestFfiGenStructs(t *testing.T) {
 	data, _ := os.ReadFile(outPath)
 	code := string(data)
 
-	if !strings.Contains(code, `let Point = ffi.struct("Point"`) {
+	if !strings.Contains(code, `let Point = ffi.struct_("Point"`) {
 		t.Error("missing wrapper variable declaration for Point")
 	}
-	if !strings.Contains(code, `let Rect = ffi.struct("Rect"`) {
+	if !strings.Contains(code, `let Rect = ffi.struct_("Rect"`) {
 		t.Error("missing wrapper variable declaration for Rect")
 	}
 	if !strings.Contains(code, `"struct:Point"`) {

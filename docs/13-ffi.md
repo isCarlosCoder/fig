@@ -140,6 +140,43 @@ ffi.call(log, "Sistema iniciado")      # imprime no stdout, retorna nil
 | `"string"`  | `char*`          | string         |
 | `"void"`    | `void`           | nil            |
 
+### Structs como valor de retorno
+
+Retornos de structs são tratados como **ponteiros opacos**. O C **deve**
+retornar um ponteiro para o struct (`struct Foo*`), não o struct por valor.
+No helper esse ponteiro é armazenado em uma tabela interna e um identificador
+único é enviado de volta ao runtime. O objeto Fig recebido contém duas
+propriedades especiais:
+
+- `__struct__` – nome do schema registrado
+- `__ptrid__` – id interno que representa o ponteiro
+
+O resto do objeto não contém campos do struct, pois esses ficam somente na
+memória nativa. Por exemplo:
+
+```js
+let make = ffi.sym(lib, "make_point", "struct:Point", ["int", "int"])
+let p = ffi.call(make, 1, 2)
+print(p.__struct__)   # "Point"
+print(p.__ptrid__)    # algo como "p-1"
+```
+
+Quando quisermos passar esse valor para outra chamada que aceite o mesmo tipo
+(ou seja, um argumento com `arg_types` contendo `"struct:Point"`), basta
+repassar o objeto inteiro; o runtime detecta o campo `__ptrid__` e o helper
+converte de volta no ponteiro original:
+
+```js
+let getx = ffi.sym(lib, "get_x", "int", ["struct:Point"])
+print(ffi.call(getx, p))   # retorna 1
+```
+
+Essa estratégia preserva a propriedade “quem aloca, libera”: o código nativo
+continua manejando a memória, e o Fig só carrega um marcador leve.
+
+O helper ainda adiciona um campo `__rtype__` ao marcador para depuração
+interna, mas ele não é necessário na API Fig.
+
 ## Quantidade de argumentos suportada
 
 | Retorno    | 0 | 1 | 2 | 3 | 4 |
@@ -181,7 +218,7 @@ automatiza a definição e a validação. Ele cria um "tipo" Fig com métodos
 interno ao registrar símbolos.
 
 ```js
-let Point = ffi.struct("Point", [
+let Point = ffi.struct_("Point", [
     { name: "x", type: "int" },
     { name: "y", type: "int" }
 ])
@@ -238,6 +275,11 @@ ffi.define_struct("Person", [
 ### Passando structs
 
 Structs são expandidos em campos individuais (flat ABI). Um `Person` com `Address` aninhado resulta em 4 argumentos na chamada C:
+
+> ⚠️ **Atenção**: se o objeto foi obtido como resultado de uma chamada FFI
+> (ou seja, é um marcador com `__ptrid__`), o runtime **não expande** seus
+> campos; ele simplesmente reenvia o identificador para o helper, permitindo
+> que estruturas permaneçam opacas e sejam passadas por pointer.
 
 ```js
 let sym = ffi.sym(lib, "person_info", "string", "struct:Person")

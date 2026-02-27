@@ -100,7 +100,7 @@ O ffi-gen agora gera:
    tipos como quarto argumento mesmo que todos sejam iguais. Isso evita erros de
    coerção/parse no helper e é necessário para structs ou assinaturas mistas.
    Quando um tipo for um struct, a variável correspondente nomeada pelo wrapper
-   (`let Point = ffi.struct(...)`) é usada em vez de uma string literal, permitindo
+   (`let Point = ffi.struct_(...)`) é usada em vez de uma string literal, permitindo
    que o mesmo descritor seja reutilizado em `ffi.call`.
    ```js
    let __sym_add = ffi.sym(__lib, "add", "int", ["int", "int"])
@@ -121,7 +121,7 @@ Exemplo completo de geração com structs:
 
 use "ffi"
 
-let Point = ffi.struct("Point", [
+let Point = ffi.struct_("Point", [
     { name: "x", type: "int" },
     { name: "y", type: "int" }
 ])

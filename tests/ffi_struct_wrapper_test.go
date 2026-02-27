@@ -14,7 +14,7 @@ import (
 // basic wrapper functionality (construction/validation/flattening)
 func TestFfiStructWrapperBasics(t *testing.T) {
 	mod := builtins.Get("ffi")
-	structFn := mod.Entries["struct"]
+	structFn := mod.Entries["struct_"]
 
 	// create descriptor Point{x:int,y:int}
 	fields := environment.NewArray([]environment.Value{
@@ -136,7 +136,7 @@ func TestFfiStructWrapperIntegration(t *testing.T) {
 	load := mod.Entries["load"]
 	sym := mod.Entries["sym"]
 	call := mod.Entries["call"]
-	structFn := mod.Entries["struct"]
+	structFn := mod.Entries["struct_"]
 
 	// define wrapper Person via high-level API
 	fields := environment.NewArray([]environment.Value{

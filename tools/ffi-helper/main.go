@@ -45,6 +45,16 @@ char* ffi_call_str_fn4_sisi(void* fn, char* a, int b, char* c, int d);
 char* ffi_call_str_fn4_ssss(void* fn, char* a, char* b, char* c, char* d);
 char* ffi_call_str_fn4_siid(void* fn, char* a, int b, int c, double d);
 
+// pointer-return wrappers (struct pointers are opaque to Fig)
+void* ffi_call_ptr_fn0(void* fn);
+void* ffi_call_ptr_fn1_int(void* fn, int a);
+void* ffi_call_ptr_fn1_str(void* fn, char* a);
+void* ffi_call_ptr_fn2_double_str(void* fn, double a, char* b);
+// pointer argument helpers
+int ffi_call_int_fn1_ptr(void* fn, void* p);
+double ffi_call_double_fn1_ptr(void* fn, void* p);
+char* ffi_call_str_fn1_ptr(void* fn, void* p);
+
 */
 import "C"
 
@@ -298,6 +308,14 @@ func serve(r io.Reader, w io.Writer) error {
 	symbolByID := map[string]unsafe.Pointer{}
 	symbolTypeByID := map[string]string{}
 
+	// storage for struct pointers returned by calls.  each id maps to a
+	// C pointer which may later be passed back as an argument.  we protect
+	// the map with a mutex since calls may happen concurrently.
+	structPtrs := map[string]unsafe.Pointer{}
+	var nextPtr uint64 = 0
+	var structPtrsMu sync.Mutex
+
+requestLoop:
 	for req := range reqCh {
 		cmd, _ := req["cmd"].(string)
 		id := req["id"]
@@ -432,6 +450,85 @@ func serve(r io.Reader, w io.Writer) error {
 				}
 				rtype := symbolTypeByID[sid]
 				args, _ := req["args"].([]interface{})
+				// struct returns: we allocate a handle for the returned C pointer and
+				// hand back a lightweight marker to the Fig runtime.
+				if strings.HasPrefix(rtype, "struct:") {
+					name := strings.TrimPrefix(rtype, "struct:")
+					var resPtr unsafe.Pointer
+					switch len(args) {
+					case 0:
+						resPtr = C.ffi_call_ptr_fn0(ptr)
+					case 1:
+						// unify handling of numeric/string/pointer arguments
+						if n, ok := args[0].(float64); ok {
+							resPtr = C.ffi_call_ptr_fn1_int(ptr, C.int(int(n)))
+						} else if s, ok := args[0].(string); ok {
+							cs := C.CString(s)
+							resPtr = C.ffi_call_ptr_fn1_str(ptr, cs)
+							C.free(unsafe.Pointer(cs))
+						} else if m, ok := args[0].(map[string]interface{}); ok {
+							if pid, ok := m["__ptrid__"].(string); ok {
+								structPtrsMu.Lock()
+								p, has := structPtrs[pid]
+								structPtrsMu.Unlock()
+								if has {
+									resPtr = p
+								} else {
+									// unknown pointer id, pass NULL
+									resPtr = nil
+								}
+							}
+						}
+					case 2:
+						// expect (double, string-like)
+						a0, aErr := safeFloat64(args[0])
+						if aErr != nil {
+							resPtr = nil
+							break
+						}
+						a := C.double(a0)
+						// convert second arg using extract logic similar to string case
+						var arg1 *C.char
+						if m, ok := args[1].(map[string]interface{}); ok {
+							if pid, ok := m["__ptrid__"].(string); ok {
+								structPtrsMu.Lock()
+								p, has := structPtrs[pid]
+								structPtrsMu.Unlock()
+								if has {
+									arg1 = (*C.char)(p)
+								}
+							}
+						}
+						if arg1 == nil {
+							// fallback to generic string conversion
+							if s, ok := args[1].(string); ok {
+								arg1 = C.CString(s)
+								defer C.free(unsafe.Pointer(arg1))
+							} else if n, ok := args[1].(float64); ok {
+								s2 := fmt.Sprintf("%v", n)
+								arg1 = C.CString(s2)
+								defer C.free(unsafe.Pointer(arg1))
+							} else {
+								arg1 = C.CString("")
+								defer C.free(unsafe.Pointer(arg1))
+							}
+						}
+						resPtr = C.ffi_call_ptr_fn2_double_str(ptr, a, arg1)
+					default:
+						// for now we don't support >2 args for struct return
+					}
+					// assign id and remember pointer
+					var idstr string
+					structPtrsMu.Lock()
+					nextPtr++
+					idstr = fmt.Sprintf("p-%d", nextPtr)
+					structPtrs[idstr] = resPtr
+					structPtrsMu.Unlock()
+					if err := sendOK(map[string]interface{}{"__struct__": name, "__ptrid__": idstr, "__rtype__": rtype}); err != nil {
+						return err
+					}
+					continue requestLoop
+				}
 				switch rtype {
 				case "int":
 					// read arg_types metadata for mixed-type dispatch
@@ -457,6 +554,21 @@ func serve(r io.Reader, w io.Writer) error {
 							return err
 						}
 					} else if len(args) == 1 {
+						// pointer argument? use dedicated wrapper
+						if m, ok := args[0].(map[string]interface{}); ok {
+							if pid, ok := m["__ptrid__"].(string); ok {
+								structPtrsMu.Lock()
+								p, has := structPtrs[pid]
+								structPtrsMu.Unlock()
+								if has {
+									res := C.ffi_call_int_fn1_ptr(ptr, p)
+									if err := sendOK(float64(res)); err != nil {
+										return err
+									}
+									continue
+								}
+							}
+						}
 						// check arg_types for mixed dispatch
 						if len(intArgTypes) >= 1 && isStrType(intArgTypes[0]) {
 							s0, ok := args[0].(string)
@@ -645,6 +757,21 @@ func serve(r io.Reader, w io.Writer) error {
 							return err
 						}
 					} else if len(args) == 1 {
+						// pointer argument support
+						if m, ok := args[0].(map[string]interface{}); ok {
+							if pid, ok := m["__ptrid__"].(string); ok {
+								structPtrsMu.Lock()
+								p, has := structPtrs[pid]
+								structPtrsMu.Unlock()
+								if has {
+									res := C.ffi_call_double_fn1_ptr(ptr, p)
+									if err := sendOK(float64(res)); err != nil {
+										return err
+									}
+									continue
+								}
+							}
+						}
 						a0, aErr := safeFloat64(args[0])
 						if aErr != nil {
 							sendErr(ErrTypeError, fmt.Sprintf("type error: arg 0: %v", aErr))
@@ -719,14 +846,33 @@ func serve(r io.Reader, w io.Writer) error {
 								C.free(unsafe.Pointer(p))
 							}
 						}()
-						// helper to extract a C string from a value (string, callback, mem ptr, or map→JSON)
+						// helper to extract a C string from a value (string, callback, mem ptr, map→JSON,
+						// or struct pointer marker)
 						extract := func(x interface{}) (*C.char, error) {
 							if s, ok := x.(string); ok {
 								cs := C.CString(s)
 								toFree = append(toFree, cs)
 								return cs, nil
 							}
+							// accept numbers by converting to string (makes string-return
+							// calls more forgiving and matches earlier semantics)
+							if n, ok := x.(float64); ok {
+								s := fmt.Sprintf("%v", n)
+								cs := C.CString(s)
+								toFree = append(toFree, cs)
+								return cs, nil
+							}
 							if m, ok := x.(map[string]interface{}); ok {
+								// pointer marker?
+								if pid, ok := m["__ptrid__"].(string); ok {
+									structPtrsMu.Lock()
+									p, has := structPtrs[pid]
+									structPtrsMu.Unlock()
+									if has {
+										return (*C.char)(p), nil
+									}
+									return nil, fmt.Errorf("unknown pointer id: %s", pid)
+								}
 								if cbid, ok := m["__cb__"].(string); ok {
 									cs := C.CString(cbid)
 									toFree = append(toFree, cs)

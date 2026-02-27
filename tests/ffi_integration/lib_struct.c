@@ -13,3 +13,21 @@ char* struct_prefix(char* json, char* prefix) {
     out[lp+lj] = '\0';
     return out;
 }
+
+// simple struct pointer example
+
+typedef struct {
+    int foo;
+} Foo;
+
+Foo* make_foo(int v) {
+    Foo* f = malloc(sizeof(Foo));
+    if (!f) return NULL;
+    f->foo = v;
+    return f;
+}
+
+int get_foo(Foo* f) {
+    if (!f) return 0;
+    return f->foo;
+}

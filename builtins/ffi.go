@@ -32,6 +32,11 @@ var structSchemas = map[string][]struct {
 const (
 	structDefKey      = "__ffi_struct_def__"
 	structInstanceKey = "__struct__"
+	// when a struct is returned from the helper we actually keep the C
+	// pointer inside the helper; the object delivered to Fig only contains
+	// this id so that subsequent calls can reuse it without knowing the
+	// raw pointer value.
+	ptrInstanceKey = "__ptrid__"
 )
 
 // helper that mirrors ffi-gen's IsSupportedType (runtime version)
@@ -50,6 +55,10 @@ func isSupportedType(t string) bool {
 // symbol argument type hints: symbolId -> []argType
 var symbolArgTypesMu sync.Mutex
 var symbolArgTypes = map[string][]string{}
+
+// store declared return types for symbols (used during call-time coercion)
+var symbolRetTypesMu sync.Mutex
+var symbolRetTypes = map[string]string{}
 
 // ResetFfiState clears all FFI global state (struct schemas, symbol arg types, callbacks).
 // Useful between test runs to avoid cross-test contamination.
@@ -74,6 +83,12 @@ func ResetFfiState() {
 // expandStructFields recursively expands a struct value's fields into flat arg lists.
 // When a field has type "struct:X", it recurses into that nested struct.
 func expandStructFields(schemaName string, val environment.Value, mar *[]interface{}, types *[]string) error {
+	// pointer markers cannot be expanded
+	if val.Type == environment.ObjectType && val.Obj != nil {
+		if _, ok := val.Obj.Entries[ptrInstanceKey]; ok {
+			return fmt.Errorf("cannot expand pointer marker for struct %s", schemaName)
+		}
+	}
 	structSchemasMu.Lock()
 	fields, has := structSchemas[schemaName]
 	structSchemasMu.Unlock()
@@ -519,6 +534,10 @@ func init() {
 				symbolArgTypes[sym] = argTypes
 				symbolArgTypesMu.Unlock()
 			}
+			// also remember declared return type to help coercion in call()
+			symbolRetTypesMu.Lock()
+			symbolRetTypes[sym] = rtype
+			symbolRetTypesMu.Unlock()
 			return environment.NewString(sym), nil
 		}),
 
@@ -580,6 +599,24 @@ func init() {
 					switch {
 					case len(at) > 7 && at[:7] == "struct:":
 						name := at[7:]
+						// pointer marker check first
+						if in.Type == environment.ObjectType && in.Obj != nil {
+							if pidV, ok := in.Obj.Entries[ptrInstanceKey]; ok && pidV.Type == environment.StringType {
+								// optional sanity check on struct name
+								if so, ok := in.Obj.Entries["__struct__"]; ok && so.Type == environment.StringType {
+									if so.Str != name {
+										return environment.NewNil(), fmt.Errorf("call: struct pointer name mismatch: expected %s", name)
+									}
+								}
+								x, err := fromEnvironmentValue(in)
+								if err != nil {
+									return environment.NewNil(), err
+								}
+								mar = append(mar, x)
+								expandedArgTypes = append(expandedArgTypes, at)
+								continue
+							}
+						}
 						// expect object or struct object
 						if in.Type != environment.ObjectType || in.Obj == nil {
 							return environment.NewNil(), fmt.Errorf("call: expected struct object for %s", name)
@@ -690,9 +727,9 @@ func init() {
 			return val, nil
 		}),
 
-		// struct(name, fieldsArr) -> high-level wrapper API
+		// struct_(name, fieldsArr) -> high-level wrapper API
 		// returns a descriptor object with methods: new, validate, flatten
-		fn("struct", func(args []environment.Value) (environment.Value, error) {
+		fn("struct_", func(args []environment.Value) (environment.Value, error) {
 			if len(args) != 2 {
 				return environment.NewNil(), fmt.Errorf("struct(name, fields)")
 			}
@@ -873,6 +910,7 @@ func init() {
 		}),
 
 		// define_struct(name, fieldsArr) -> registers a struct schema for marshalling
+		// Note: wrapper API available as `struct_` builtin (see above).
 		// fieldsArr is an array of objects: [{name: "field1", type: "string"}, ...]
 		fn("define_struct", func(args []environment.Value) (environment.Value, error) {
 			if len(args) != 2 {

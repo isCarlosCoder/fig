@@ -199,7 +199,7 @@ func Generate(def *DefFile) string {
 		b.WriteString("# --- Struct definitions ---\n\n")
 		for _, s := range def.Structs {
 			// declare wrapper variable with same name as struct
-			b.WriteString(fmt.Sprintf("let %s = ffi.struct(\"%s\", [\n", s.Name, s.Name))
+			b.WriteString(fmt.Sprintf("let %s = ffi.struct_(\"%s\", [\n", s.Name, s.Name))
 			for i, f := range s.Fields {
 				comma := ","
 				if i == len(s.Fields)-1 {
