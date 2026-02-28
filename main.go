@@ -139,14 +139,16 @@ func main() {
 			} else {
 				hasErr := false
 				for _, mod := range mods {
-					// Reject explicit owner/repo forms; only aliases allowed
 					if strings.Contains(mod, "/") {
-						fmt.Fprintf(os.Stderr, "invalid module spec '%s': expected alias name (no '/'),\n", mod)
-						hasErr = true
-						continue
-					}
-					if err := installAlias(mod, os.Stdout, os.Stderr); err != nil {
-						hasErr = true
+						// treat as direct GitHub spec owner/repo
+						if err := installModule(mod, "", os.Stdout, os.Stderr); err != nil {
+							hasErr = true
+						}
+					} else {
+						// alias lookup via registry
+						if err := installAlias(mod, os.Stdout, os.Stderr); err != nil {
+							hasErr = true
+						}
 					}
 				}
 				if hasErr {
@@ -639,13 +641,25 @@ func installModule(mod string, alias string, out io.Writer, errOut io.Writer) er
 		return err
 	}
 
+	// ensure the downloaded project is a library (not an application or other)
+	projCfg, err2 := loadProjectToml(moduleTomlPath)
+	if err2 != nil {
+		fmt.Fprintf(errOut, "cannot parse module fig.toml: %v\n", err2)
+		return err2
+	}
+	if strings.ToLower(projCfg.Project.Type) != "library" {
+		fmt.Fprintf(errOut, "module %s/%s has project.type=%q (must be \"library\")\n", owner, repo, projCfg.Project.Type)
+		return fmt.Errorf("module is not a library")
+	}
+
 	depName := modCfg.Project.Name
 	if depName == "" {
 		depName = repo
 	}
 	depVersion := modCfg.Project.Version
 
-	projCfg, err := loadProjectToml(projectToml)
+	// update parent project fig.toml with new dependency
+	projCfg, err = loadProjectToml(projectToml)
 	if err != nil {
 		fmt.Fprintf(errOut, "cannot read fig.toml: %v\n", err)
 		return err
