@@ -25,3 +25,5 @@ extras/
 /modules/
 myproject/
 grammar/.antlr/
+notes.md
+figdocs/

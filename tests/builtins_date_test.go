@@ -221,12 +221,12 @@ func TestDateFromTimestamp(t *testing.T) {
 	out, err := runFig(t, useDate(`
 let ts = date.parse("2024-06-15 10:30:45", "YYYY-MM-DD HH:mm:ss")
 let dt = date.from_timestamp(ts)
-print(dt.ano)
-print(dt.mes)
-print(dt.dia)
-print(dt.hora)
-print(dt.minuto)
-print(dt.segundo)
+print(dt.year)
+print(dt.month)
+print(dt.day)
+print(dt.hour)
+print(dt.minute)
+print(dt.second)
 `))
 	if err != nil {
 		t.Fatalf("runtime error: %v", err)

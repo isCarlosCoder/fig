@@ -165,14 +165,14 @@ func init() {
 			t := time.UnixMilli(int64(ts))
 
 			entries := map[string]environment.Value{
-				"ano":     environment.NewNumber(float64(t.Year())),
-				"mes":     environment.NewNumber(float64(t.Month())),
-				"dia":     environment.NewNumber(float64(t.Day())),
-				"hora":    environment.NewNumber(float64(t.Hour())),
-				"minuto":  environment.NewNumber(float64(t.Minute())),
-				"segundo": environment.NewNumber(float64(t.Second())),
+				"year":   environment.NewNumber(float64(t.Year())),
+				"month":  environment.NewNumber(float64(t.Month())),
+				"day":    environment.NewNumber(float64(t.Day())),
+				"hour":   environment.NewNumber(float64(t.Hour())),
+				"minute": environment.NewNumber(float64(t.Minute())),
+				"second": environment.NewNumber(float64(t.Second())),
 			}
-			keys := []string{"ano", "mes", "dia", "hora", "minuto", "segundo"}
+			keys := []string{"year", "month", "day", "hour", "minute", "second"}
 			return environment.NewObject(entries, keys), nil
 		}),
 	))
